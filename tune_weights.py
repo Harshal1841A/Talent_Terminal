@@ -19,6 +19,7 @@ import sys
 import itertools
 from typing import List, Dict
 from pathlib import Path
+from core_scoring import score_ml_signals
 
 sys.stdout.reconfigure(encoding='utf-8')
 
@@ -55,8 +56,6 @@ def score_exp(years, W_EXP):
     elif years > 15: raw *= 0.6
     return raw * W_EXP
 
-def score_ml(count, W_ML):
-    return min(count / 5.0, 1.0) * W_ML
 
 def score_saved(saved, W_SAVED):
     if saved <= 0: return 0.0
@@ -87,7 +86,7 @@ def compute_final(meta, W_EXP, W_ML, W_COMPANY, W_SAVED, W_BEH):
     company = (W_COMPANY if meta["has_product_company"] else 0.0) + \
               (-25 if meta["consulting_only"] else 0.0)
     return (semantic + score_exp(meta["years_exp"], W_EXP) + company +
-            score_ml(meta["ml_signal_count"], W_ML) +
+            score_ml_signals(meta["ml_signal_count"], W_ML) +
             score_behavioral(meta, W_BEH) +
             score_saved(meta.get("saved_by_recruiters", 0), W_SAVED))
 

@@ -349,8 +349,8 @@ def extract_features(candidate: dict) -> dict:
     seniority_levels = [get_seniority(e.get("title", "")) for e in career]
     monotone_escalating = (
         len(seniority_levels) >= 3 and
-        all(seniority_levels[i] <= seniority_levels[i + 1] for i in range(len(seniority_levels) - 1)) and
-        seniority_levels[-1] > seniority_levels[0]
+        all(seniority_levels[i] >= seniority_levels[i + 1] for i in range(len(seniority_levels) - 1)) and
+        seniority_levels[-1] < seniority_levels[0]
     )
     title_chaser = bool(avg_tenure_months < 18 and monotone_escalating)
 

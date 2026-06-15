@@ -46,7 +46,7 @@ def norm_semantic(raw_logit: float) -> float:
     return (1.0 / (1.0 + math.exp(-(raw_logit + 2.0)))) * W_SEMANTIC
 
 
-def score_experience(years: float) -> float:
+def score_experience(years: float, w_experience: float = W_EXPERIENCE) -> float:
     if years <= 0:
         return 0.0
     peak = 7.0
@@ -56,46 +56,47 @@ def score_experience(years: float) -> float:
         raw *= 0.3
     elif years > 15:
         raw *= 0.6
-    return raw * W_EXPERIENCE
+    return raw * w_experience
 
 
-def score_ml_signals(count: float) -> float:
-    return min(count, 1.0) * W_ML_SIGNALS
+def score_ml_signals(count: float, w_ml_signals: float = W_ML_SIGNALS) -> float:
+    return min(count, 1.0) * w_ml_signals
 
 
-def score_location(location_score: float) -> float:
+def score_location(location_score: float, w_location: float = W_LOCATION) -> float:
+    # location_score is unweighted currently? 
     return float(location_score or 0.0)
 
 
-def score_ml_role_ratio(ratio: float) -> float:
+def score_ml_role_ratio(ratio: float, w_ml_ratio: float = W_ML_RATIO) -> float:
     ratio = float(ratio or 0.0)
     if ratio >= 0.5:
-        return min(ratio, 1.0) * W_ML_RATIO
+        return min(ratio, 1.0) * w_ml_ratio
     elif ratio >= 0.2:
-        return ratio * W_ML_RATIO * 0.5
+        return ratio * w_ml_ratio * 0.5
     else:
         return max(-5.0, (ratio - 0.2) * 25)
 
 
-def score_saved_by_recruiters(saved: int) -> float:
+def score_saved_by_recruiters(saved: int, w_saved_recruiters: float = W_SAVED_RECRUITERS) -> float:
     if saved <= 0:
         return 0.0
-    return min(saved / 15.0, 1.0) * W_SAVED_RECRUITERS
+    return min(saved / 15.0, 1.0) * w_saved_recruiters
 
 
-def score_profile_completeness(score: float) -> float:
+def score_profile_completeness(score: float, w_profile_complete: float = W_PROFILE_COMPLETE) -> float:
     if score <= 0:
         return 0.0
     if score >= 90:
-        return W_PROFILE_COMPLETE
+        return w_profile_complete
     elif score >= 70:
-        return (score - 70) / 20.0 * W_PROFILE_COMPLETE
+        return (score - 70) / 20.0 * w_profile_complete
     elif score < 50:
         return -1.0
     return 0.0
 
 
-def score_engagement(meta: dict) -> float:
+def score_engagement(meta: dict, w_engagement: float = W_ENGAGEMENT) -> float:
     score = 0.0
     apps = meta.get("applications_submitted", 0) or 0
     if apps >= 5: score += 1.5
@@ -117,19 +118,19 @@ def score_engagement(meta: dict) -> float:
     if meta.get("linkedin_connected", False) or False:
         score += 0.5
 
-    return min(score, W_ENGAGEMENT)
+    return min(score, w_engagement)
 
 
-def score_trust(meta: dict) -> float:
+def score_trust(meta: dict, w_trust: float = W_TRUST) -> float:
     score = 0.0
     if meta.get("verified_email", False) or False:
         score += 1.0
     if meta.get("verified_phone", False) or False:
         score += 1.0
-    return min(score, W_TRUST)
+    return min(score, w_trust)
 
 
-def score_behavioral(meta: dict) -> float:
+def score_behavioral(meta: dict, w_behavioral: float = W_BEHAVIORAL) -> float:
     score = 0.0
     response_rate = meta.get("response_rate", 0.5) or 0.5
     notice_days = meta.get("notice_days", 60) or 60
@@ -153,7 +154,7 @@ def score_behavioral(meta: dict) -> float:
     else:
         score -= 3.0
 
-    score += (response_rate - 0.5) * W_BEHAVIORAL
+    score += (response_rate - 0.5) * w_behavioral
 
     if 0 <= last_active_days <= 30:
         score += 2.0
@@ -170,20 +171,20 @@ def score_behavioral(meta: dict) -> float:
     if willing_to_relocate:
         score += 1.0
 
-    return max(-W_BEHAVIORAL, min(score, W_BEHAVIORAL))
+    return max(-w_behavioral, min(score, w_behavioral))
 
 
-def score_github(github_score: float) -> float:
+def score_github(github_score: float, w_github: float = W_GITHUB) -> float:
     if github_score < 0:
         return 0.0
-    return (github_score / 100.0) * W_GITHUB
+    return (github_score / 100.0) * w_github
 
 
-def score_assessment(core_skill_score: float, avg_assessment: float) -> float:
+def score_assessment(core_skill_score: float, avg_assessment: float, w_assessment: float = W_ASSESSMENT) -> float:
     if core_skill_score >= 0:
-        return (core_skill_score / 100.0) * W_ASSESSMENT
+        return (core_skill_score / 100.0) * w_assessment
     elif avg_assessment >= 0:
-        return (avg_assessment / 100.0) * (W_ASSESSMENT * 0.5)
+        return (avg_assessment / 100.0) * (w_assessment * 0.5)
     return 0.0
 
 

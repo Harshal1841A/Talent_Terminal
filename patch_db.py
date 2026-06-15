@@ -23,6 +23,7 @@ import math
 from datetime import date, datetime
 from pathlib import Path
 from tqdm import tqdm
+from precompute import count_ml_signals
 
 BASE = Path(__file__).parent
 
@@ -65,41 +66,6 @@ PRODUCTION_ML_SIGNALS = [
     "dense retrieval", "hybrid search", "bm25", "reranking", "re-ranking",
     "fine-tun", "deployed to production", "production deployment", "a/b test",
 ]
-
-
-def get_recency_weight(years_ago: float) -> float:
-    if years_ago <= 1.0: return 1.0
-    if years_ago >= 5.0: return 0.1
-    if years_ago <= 3.0: return 1.0 - 0.25 * (years_ago - 1.0)
-    return 0.5 - 0.2 * (years_ago - 3.0)
-
-
-def count_ml_signals(career: list, summary: str) -> float:
-    """Quick ML signal count for research_founding_score fix."""
-    total = 0.0
-    today = date.today()
-    for sig in PRODUCTION_ML_SIGNALS:
-        if sig in (summary or "").lower():
-            total += 1.0
-    for exp in career:
-        combined = (
-            (exp.get("description", "") or "") + " " +
-            (exp.get("title", "") or "")
-        ).lower()
-        count = sum(1 for sig in PRODUCTION_ML_SIGNALS if sig in combined)
-        if count > 0:
-            end_str = exp.get("end_date")
-            years_ago = 0.0
-            if end_str:
-                try:
-                    d = datetime.strptime(end_str[:10], "%Y-%m-%d").date()
-                    years_ago = max(0.0, (today - d).days / 365.25)
-                except Exception:
-                    pass
-            total += count * get_recency_weight(years_ago)
-    if total == 0:
-        return 0.0
-    return float(1 / (1 + math.exp(-0.5 * (total - 2))))
 
 
 def get_seniority(title: str) -> int:
@@ -212,8 +178,8 @@ def compute_new_features(p: dict) -> dict:
     seniority_levels = [get_seniority(e.get("title", "")) for e in career]
     monotone_escalating = (
         len(seniority_levels) >= 3 and
-        all(seniority_levels[i] <= seniority_levels[i + 1] for i in range(len(seniority_levels) - 1)) and
-        seniority_levels[-1] > seniority_levels[0]
+        all(seniority_levels[i] >= seniority_levels[i + 1] for i in range(len(seniority_levels) - 1)) and
+        seniority_levels[-1] < seniority_levels[0]
     )
     title_chaser = bool(avg_tenure_months < 18 and monotone_escalating)
 
@@ -285,7 +251,7 @@ for m in tqdm(db["metadata"]):
 
 print("Saving patched candidate_db.pkl ...")
 with open(BASE / "candidate_db.pkl", "wb") as f:
-    pickle.dump(db, f, protocol=4)
+    pickle.dump(db, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 print("\n===== Patch Summary =====")
 print(f"  Total candidates patched : {len(db['metadata']):,}")

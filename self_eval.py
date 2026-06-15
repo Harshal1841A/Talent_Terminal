@@ -5,7 +5,7 @@ import numpy as np
 
 def dcg_at_k(r, k):
     """Discounted Cumulative Gain at K"""
-    r = np.asfarray(r)[:k]
+    r = np.asarray(r, dtype=float)[:k]
     if r.size:
         return np.sum((2**r - 1) / np.log2(np.arange(2, r.size + 2)))
     return 0.

@@ -82,51 +82,10 @@ FEATURE_NAMES = [
 ]
 
 
-def build_features(meta: dict) -> list:
-    years_exp       = float(meta.get("years_exp", 0) or 0)
-    ml_signal       = float(meta.get("ml_signal_count", 0) or 0)
-    jd_bonus        = float(meta.get("jd_term_bonus", 0.0) or 0.0)
-    elite_bonus     = float(meta.get("elite_company_bonus", 0.0) or 0.0)
-    product_co      = 1.0 if meta.get("has_product_company") else 0.0
-    consulting      = 1.0 if meta.get("consulting_only") else 0.0
-    github          = float(meta.get("github_score", -1) or -1)
-    github          = max(github, 0.0) / 100.0  # normalize to [0, 1]
-    core_skill      = float(meta.get("core_skill_score", -1) or -1)
-    core_skill      = max(core_skill, 0.0) / 100.0
-    avg_assess      = float(meta.get("avg_assessment", -1) or -1)
-    avg_assess      = max(avg_assess, 0.0) / 100.0
-    edu_tier        = 1.0 if meta.get("edu_tier_1") else 0.0
-    has_pub         = 1.0 if meta.get("has_external_validation") else 0.0
-    resp_rate       = float(meta.get("response_rate", 0.5) or 0.5)
-    notice          = float(meta.get("notice_days", 90) or 90)
-    notice_norm     = max(0.0, 1.0 - notice / 180.0)  # 0 days = 1.0, 180+ = 0.0
-    open_work       = 1.0 if meta.get("open_to_work") else 0.0
-    last_active     = float(meta.get("last_active_days", 365) or 365)
-    last_active_n   = max(0.0, 1.0 - last_active / 365.0)
-    interview_comp  = float(meta.get("interview_completion", 0.5) or 0.5)
-    offer_acc       = float(meta.get("offer_acceptance", -1) or -1)
-    offer_acc       = max(offer_acc, 0.0) if offer_acc >= 0 else 0.5
-    profile_pct     = float(meta.get("profile_completeness", 50) or 50) / 100.0
-    apps_submitted  = float(meta.get("applications_submitted", 0) or 0)
-    search_appear   = float(meta.get("search_appearance_30d", 0) or 0)
-    resp_time       = float(meta.get("avg_response_time_hours", 999) or 999)
-    resp_time_n     = max(0.0, 1.0 - resp_time / 999.0)
-    endorsements    = float(meta.get("endorsements_received", 0) or 0)
-    linkedin        = 1.0 if meta.get("linkedin_connected") else 0.0
-    email_ver       = 1.0 if meta.get("verified_email") else 0.0
-    phone_ver       = 1.0 if meta.get("verified_phone") else 0.0
-    research        = float(meta.get("research_founding_score", 0) or 0)
-    skill_count     = float(meta.get("skill_count", 0) or 0) / 100.0
-    relocate        = 1.0 if meta.get("willing_to_relocate") else 0.0
+from core_scoring import build_features
 
-    return [
-        years_exp, ml_signal, jd_bonus, elite_bonus,
-        product_co, consulting, github, core_skill, avg_assess,
-        edu_tier, has_pub, resp_rate, notice_norm, open_work,
-        last_active_n, interview_comp, offer_acc, profile_pct,
-        apps_submitted, search_appear, resp_time_n, endorsements,
-        linkedin, email_ver, phone_ver, research, skill_count, relocate,
-    ]
+
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -204,7 +163,7 @@ for name, imp in sorted(zip(FEATURE_NAMES, importances), key=lambda x: -x[1]):
 
 import joblib
 output_path = BASE / "lgbm_reranker.pkl"
-joblib.dump({"model": model, "feature_names": FEATURE_NAMES}, output_path)
+joblib.dump(model, output_path)
 print(f"\n✓ Saved: {output_path}")
 print("Now update rank.py and app.py to use this model (already wired in if you ran the full plan).")
 print("Then run: python rank.py")

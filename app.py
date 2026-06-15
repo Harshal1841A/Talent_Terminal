@@ -23,9 +23,9 @@ from core_scoring import (
     W_SEMANTIC, W_EXPERIENCE, W_COMPANY_TYPE, W_ML_SIGNALS, W_BEHAVIORAL,
     W_SAVED_RECRUITERS, W_GITHUB, W_ASSESSMENT, W_PROFILE_COMPLETE,
     W_EDUCATION, W_ENGAGEMENT, W_TRUST, RRF_K, RRF_WEIGHT,
-    HONEYPOT_PENALTY, WRONG_TITLE_PENALTY, CONSULTING_PENALTY,
+    HONEYPOT_PENALTY, WRONG_TITLE_PENALTY, CONSULTING_ONLY_PENALTY,
     norm_semantic, build_features, score_experience, score_ml_signals,
-    score_saved, score_github, score_assessment, score_completeness,
+    score_saved_by_recruiters, score_github, score_assessment, score_profile_completeness,
     score_engagement, score_trust, score_behavioral, generate_reasoning
 )
 
@@ -219,7 +219,7 @@ def load_models():
     if lgb_path.exists():
         import joblib
         print("Loading LightGBM reranker...")
-        lgb_model = joblib.load(lgb_path)["model"]
+        lgb_model = joblib.load(lgb_path)
         
     return bi, ce, lgb_model
 
@@ -344,7 +344,7 @@ def run_pipeline(
                 final = WRONG_TITLE_PENALTY + semantic
             else:
                 company_s = (w_company if meta.get("has_product_company") else 0.0) + \
-                            (CONSULTING_PENALTY if meta.get("consulting_only") else 0.0)
+                            (CONSULTING_ONLY_PENALTY if meta.get("consulting_only") else 0.0)
                 final = (
                     semantic
                     + score_experience(meta.get("years_exp", 0) or 0, w_experience)
@@ -354,8 +354,8 @@ def run_pipeline(
                     + score_github(meta.get("github_score", -1) or -1, w_github)
                     + score_assessment(meta.get("core_skill_score", -1) or -1, meta.get("avg_assessment", -1) or -1)
                     + (w_education if meta.get("edu_tier_1") else 0.0)
-                    + score_saved(meta.get("saved_by_recruiters", 0) or 0, w_saved)
-                    + score_completeness(meta.get("profile_completeness", 50) or 50)
+                    + score_saved_by_recruiters(meta.get("saved_by_recruiters", 0) or 0, w_saved)
+                    + score_profile_completeness(meta.get("profile_completeness", 50) or 50)
                     + score_engagement(meta)
                     + score_trust(meta)
                     + meta.get("research_founding_score", 0.0)

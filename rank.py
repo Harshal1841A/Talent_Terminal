@@ -66,7 +66,7 @@ def rank_candidates():
     lgb_path = BASE / "lgbm_reranker.pkl"
     if lgb_path.exists():
         import joblib
-        lgb_model = joblib.load(lgb_path)["model"]
+        lgb_model = joblib.load(lgb_path)
     else:
         lgb_model = None
     jd_phrases = [
@@ -94,7 +94,7 @@ def rank_candidates():
     faiss_index = faiss.read_index(str(BASE / "faiss_index.bin"))
 
     # 4. Stage 1: Dense Retrieval (FAISS)
-    k_retrieve = min(600, len(metadata))
+    k_retrieve = min(2000, len(metadata))
     print(f"Stage 1: Computing FAISS dense retrieval for top {k_retrieve} candidates...")
     
     jd_emb_np = jd_embedding.cpu().numpy().reshape(1, -1)
@@ -130,7 +130,7 @@ def rank_candidates():
     if os.path.exists(lgb_path):
         print("Loading LightGBM reranker...")
         import joblib
-        lgb_model = joblib.load(lgb_path)["model"]
+        lgb_model = joblib.load(lgb_path)
         
         print("  Predicting LightGBM scores...")
         X_lgb = np.array([build_features(metadata[idx]) for idx in top_k_indices], dtype=np.float32)
@@ -219,14 +219,12 @@ def rank_candidates():
             if meta.get("skill_count", 0) > 80 and meta.get("years_exp", 0) < 3:
                 final -= 50
 
-        reasoning = generate_reasoning(meta, raw_ce, final)
-
         results.append({
             "candidate_id": meta["candidate_id"],
             "score": final,
             "raw_ce": raw_ce,
             "bienc_rank": bienc_rank_lookup[original_idx],
-            "reasoning": reasoning,
+            "reasoning": "",
             "meta": meta,
             "breakdown": {
                 "Semantic": semantic if not meta.get("honeypot") and not meta.get("wrong_title") else 0,
@@ -274,6 +272,9 @@ def rank_candidates():
 
             # Properly scale to exactly RRF_WEIGHT for the theoretical #1 rank in all lists
             r["score"] += (rrf_score / rrf_max) * RRF_WEIGHT
+
+    for r in results:
+        r["reasoning"] = generate_reasoning(r["meta"], r["raw_ce"], r["score"])
 
     # 7. Sort: score DESC, then candidate_id ASC for tie-breaking
     print("Sorting and selecting top 100...")
