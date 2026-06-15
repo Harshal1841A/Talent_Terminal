@@ -9,67 +9,41 @@ app_file: app.py
 pinned: false
 ---
 
-# 🚀 Talent Terminal: Candidate Ranking Pipeline
+# 🚀 Talent Terminal
 
-Talent Terminal is a high-performance candidate-ranking system designed to filter and rank 100K+ profiles for specialized roles (e.g., Senior AI Engineer) under strict performance constraints (≤5min execution, ≤16GB RAM, CPU-only).
+A ruthless, highly-optimized candidate ranking pipeline for the India Runs Data and AI Challenge. Filters and ranks 100K+ profiles using dense retrieval, cross-encoder re-ranking, and strict behavioral heuristics.
 
-## 🛠 Pipeline Architecture
+**Performance Constraints:** ≤5min execution, ≤16GB RAM, CPU-only. Fully offline.
 
-The ranking pipeline executes through three heavily optimized stages:
+## ⚙️ Architecture
 
-1. **Stage 1 (Dense Retrieval):** 
-   - Uses `BAAI/bge-base-en-v1.5` (offline) to embed the Job Description (JD) and compute cosine similarities against precomputed candidate embeddings.
-   - Retrieves the top 800 candidates to balance high recall with latency limits.
+1. **Retrieval (`BAAI/bge-base-en-v1.5`):** Embeds JD and filters top 800 candidates via cosine similarity against precomputed embeddings.
+2. **Re-ranking (`cross-encoder/ms-marco-MiniLM-L-6-v2`):** Deep semantic matching on top candidates (batch size 128 to prevent OOM).
+3. **Heuristics & Fusion:** Punishes "title chasers", scores location matching, applies ML behavioral signals, and fuses scores additively.
 
-2. **Stage 2 (Cross-Encoder Re-ranking):** 
-   - Uses `cross-encoder/ms-marco-MiniLM-L-6-v2` (offline) to deeply analyze the semantic match between the JD and the top candidate profiles.
-   - Batch size is optimized (128) to prevent OOM errors on 16GB systems.
+## 🚀 Usage
 
-3. **Stage 3 (Behavioral Heuristics & Fusion):** 
-   - Applies domain-specific expert heuristics: `location_score`, `ml_role_ratio`, `title_chaser` penalty, and honeypot detection.
-   - Fuses semantic scores, heuristic scores, and optional LightGBM behavioral scores using an additive approach with proper scaling constraints.
-   - Final output: Generates a `submission.csv` (Top 100) and a `dashboard.html` visual report.
+### 1. Precompute (Offline Generation)
+```bash
+python precompute.py
+```
+*(Takes up to 24h depending on hardware. Generates required `candidate_db.pkl` & `bm25_index.pkl`)*
 
-## 🚀 Execution & Deployment
+### 2. Rank (Production)
+```bash
+python rank.py
+```
+*(Executes the pipeline in <5 mins, outputs `submission.csv`)*
 
-### Local Offline Execution (Sandbox/Air-gapped)
+### 3. Deploy (Hugging Face Spaces)
+The repository intentionally excludes all models, `*.pkl`, and `.csv` artifacts to prevent bloat. Do not push large models to GitHub. 
 
-The system is configured to run fully offline without any network dependency.
-
-1. **Prerequisites:**
-   Ensure `BAAI/bge-base-en-v1.5` and `cross-encoder/ms-marco-MiniLM-L-6-v2` are downloaded to the local `./models` directory (using the offline model downloader script if necessary).
-
-2. **Run the Precompute (One-time):**
-   ```bash
-   python precompute.py
-   ```
-   *Note: This generates `candidate_db.pkl` and `bm25_index.pkl`.*
-
-3. **Run the Ranking (Production):**
-   ```bash
-   python rank.py
-   ```
-   *Guaranteed to finish in ≤5 minutes on standard hardware.*
-
-### Hugging Face Spaces Deployment
-
-To deploy the Gradio UI (`app.py`) to Hugging Face Spaces:
-
-1. **Artifact Exclusion:**
-   Artifacts and models are extremely large. They are intentionally ignored via `.gitignore` to prevent repository bloat. DO NOT attempt to push them via Git LFS to standard GitHub as they exceed quotas.
-   You must regenerate the data (`python precompute.py`) or download the models on your deployment server directly.
-
-2. **Hardware Requirements:**
-   - **RAM:** Minimum 16GB required. If Stage 2 runs out of memory (OOM), request a CPU-upgrade tier (32GB RAM).
-   - **Startup Time:** Initial startup may take ~90 seconds due to memory mapping of the 1GB+ artifact file (`candidate_db.pkl`).
-
-3. **Launch:**
-   Once pushed, Hugging Face will automatically detect `app.py` and launch the Gradio dashboard interface for interactive candidate filtering.
+To deploy:
+1. Push only the code.
+2. Download models (`models/`) and run `precompute.py` on the target server.
+3. Hugging Face Spaces will automatically launch the Gradio app (`app.py`). Requires 16GB+ RAM.
 
 ## 🧪 Evaluation
-
-To measure the effectiveness of the ranking against a known gold-standard subset:
 ```bash
 python self_eval.py --submission submission.csv --gold gold_labels.csv --k 10
 ```
-This computes NDCG@10, MAP@10, and MRR. If a gold labels file isn't provided, it will generate a synthetic one for demonstration purposes.

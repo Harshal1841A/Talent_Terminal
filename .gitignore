@@ -1,9 +1,30 @@
+# Large data files and models
 *.pkl
 *.bin
 *.jsonl
+*.csv
+*.parquet
 models/
+
+# Environment and caches
 __pycache__/
+venv/
+.venv/
+.env
+
+# Generated output and reports
+analysis_report.txt
+crash_log.txt
+dashboard.html
+
+# Agent and specific plugins
 .agents/
+.understand-anything/
 graphify-out/
+
+# Documents
+*.docx
 important_files.zip
+
+# OS
 .DS_Store
