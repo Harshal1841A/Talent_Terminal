@@ -1,0 +1,9 @@
+*.pkl
+*.bin
+*.jsonl
+models/
+__pycache__/
+.agents/
+graphify-out/
+important_files.zip
+.DS_Store

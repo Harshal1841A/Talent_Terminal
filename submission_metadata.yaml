@@ -1,0 +1,25 @@
+entry_point: "app.py"
+team_name: Antigravity
+models_used:
+  - sentence-transformers/BAAI/bge-base-en-v1.5 (Dense Bi-Encoder for Stage 1 Retrieval)
+  - cross-encoder/ms-marco-MiniLM-L-6-v2 (Cross-Encoder for Stage 2 Re-ranking)
+  - rank_bm25 (Sparse Lexical Retrieval)
+
+libraries:
+  - torch
+  - sentence-transformers
+  - rank_bm25
+  - numpy
+  - pandas
+  - scipy
+
+hardware:
+  - Offline Precomputation: CPU (~27 hours)
+  - Online Inference (rank.py): CPU (~75 seconds)
+
+approach_summary: |
+  We implemented an industry-standard 3-Stage Retrieval Pipeline:
+  1. Dense + Sparse Retrieval (Stage 1): We use BAAI/bge-base-en-v1.5 (with Multi-Phrase JD Embedding) to fetch the top candidates by semantic similarity, combined with a BM25 sparse index for exact keyword matching. This rapidly filters 100,000 candidates down to 2,000.
+  2. Deep Semantic Re-ranking (Stage 2): The top 2,000 candidates are passed through a single Cross-Encoder (MiniLM-L-6-v2). Unlike Bi-Encoders, Cross-Encoders read the JD and Candidate Profile simultaneously using self-attention, producing a highly precise relevance score.
+  3. Heuristic & Behavioral Modifiers (Stage 3): The semantic score is fused using Reciprocal Rank Fusion (RRF), then heavily modified by business logic. We apply a Gaussian reward curve for experience (peaking at 7 years), heavily reward product company experience, penalize consulting-only backgrounds, and filter out honeypot profiles and wrong titles.
+  The final output is a CSV alongside a highly visual, interactive HTML dashboard (dashboard.html) for recruiter explainability.

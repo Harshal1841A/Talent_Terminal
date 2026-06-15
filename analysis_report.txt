@@ -1,0 +1,85 @@
+
+============================================================
+EXPERIENCE DISTRIBUTION
+============================================================
+  0-2yr                 7,470  (  7.5%)  ###
+  12yr+                14,388  ( 14.4%)  #######
+  2-4yr                17,575  ( 17.6%)  ########
+  4-5yr                 8,825  (  8.8%)  ####
+  5-9yr (TARGET)       34,375  ( 34.4%)  #################
+  9-12yr               17,367  ( 17.4%)  ########
+
+============================================================
+COMPANY TYPE
+============================================================
+  Product company experience: 91,009 (91.0%)
+  Consulting-only:            8,991 (9.0%)
+
+============================================================
+HONEYPOTS & DISQUALIFIERS
+============================================================
+  Honeypots detected:  21 (0.0%)
+  Wrong title (disq):  31,412 (31.4%)
+  Clean candidates:    68,567
+
+============================================================
+PRODUCTION ML SIGNALS
+============================================================
+  0 signals                 29,931  (29.9%)
+  1-2 signals               70,069  (70.1%)
+
+============================================================
+BEHAVIORAL SIGNALS
+============================================================
+  Open to work:           35,339 (35.3%)
+  Immediate joiner:       4 (0.0%)
+  Notice <= 30 days:      13,805 (13.8%)
+  Notice > 90 days:       30,551 (30.6%)
+  Active last 7 days:     0 (0.0%)
+  Active last 30 days:    7,278 (7.3%)
+  Verified email+phone:   44,530 (44.5%)
+  LinkedIn connected:     35,999 (36.0%)
+
+============================================================
+SAVED BY RECRUITERS (30d)
+============================================================
+  0 saves               6,671  (6.7%)
+  1-3 saves            20,262  (20.3%)
+  16+ saves             9,223  (9.2%)
+  4-7 saves            26,559  (26.6%)
+  8-15 saves           37,285  (37.3%)
+
+============================================================
+EDUCATION
+============================================================
+  Tier-1 institution:     6,413 (6.4%)
+
+============================================================
+GITHUB ACTIVITY
+============================================================
+  No GitHub linked:   64,637 (64.6%)
+  GitHub score >= 70: 402 (0.4%)
+
+============================================================
+CURRENT TOP CANDIDATES (from submission.csv)
+============================================================
+  #1    CAND_0046525  score=223.15
+        Location is a direct match for the JD's preferred cities (score: 5/5) — no relocation friction expec...
+  #2    CAND_0081846  score=222.28
+        6 of their 7 total years (100%) were spent in ML-titled roles — career composition closely matches t...
+  #3    CAND_0071974  score=217.83
+        7 of their 8 total years (100%) were spent in ML-titled roles — career composition closely matches t...
+  #4    CAND_0018499  score=216.30
+        Location is a direct match for the JD's preferred cities (score: 5/5) — no relocation friction expec...
+  #5    CAND_0002025  score=214.02
+        5 of their 6 total years (100%) were spent in ML-titled roles — career composition closely matches t...
+  #6    CAND_0055905  score=206.91
+        8 of their 8 total years (100%) were spent in ML-titled roles — career composition closely matches t...
+  #7    CAND_0046064  score=204.34
+        8 of their 9 total years (100%) were spent in ML-titled roles — career composition closely matches t...
+  #8    CAND_0077337  score=203.03
+        6 of their 7 total years (100%) were spent in ML-titled roles — career composition closely matches t...
+  #9    CAND_0011687  score=202.76
+        7 of their 8 total years (100%) were spent in ML-titled roles — career composition closely matches t...
+  #10   CAND_0008425  score=199.71
+        7 of their 8 total years (100%) were spent in ML-titled roles — career composition closely matches t...

@@ -1,0 +1,270 @@
+# Talent Terminal Configuration
+
+weights:
+  W_SEMANTIC: 60
+  W_EXPERIENCE: 25
+  W_COMPANY_TYPE: 18
+  W_ML_SIGNALS: 20
+  W_BEHAVIORAL: 10
+  W_SAVED_RECRUITERS: 12
+  W_GITHUB: 5
+  W_ASSESSMENT: 5
+  W_PROFILE_COMPLETE: 4
+  W_EDUCATION: 3
+  W_RECENCY: 3
+  W_ENGAGEMENT: 3
+  W_TRUST: 2
+  W_LOCATION: 5
+  W_ML_RATIO: 12
+  RRF_K: 60
+  RRF_WEIGHT: 10
+
+penalties:
+  HONEYPOT_PENALTY: -9999
+  WRONG_TITLE_PENALTY: -500
+  CONSULTING_ONLY_PENALTY: -25
+  TITLE_CHASER_PENALTY: -12
+
+heuristics:
+  ml_role_titles:
+    - ml engineer
+    - machine learning
+    - ai engineer
+    - nlp engineer
+    - data scientist
+    - applied scientist
+    - search engineer
+    - recommendation
+    - ranking engineer
+    - research scientist
+    - deep learning
+    - computer vision
+    - ir engineer
+    - applied ml
+    - ml researcher
+    - ai researcher
+    - speech
+    - nlp
+
+  seniority_rank:
+    intern: 0
+    junior: 0
+    associate: 0
+    "": 1
+    senior: 2
+    staff: 3
+    lead: 3
+    principal: 4
+    head: 4
+    director: 5
+    vp: 5
+
+  consulting_firms:
+    - tcs
+    - tata consultancy
+    - infosys
+    - wipro
+    - cognizant
+    - accenture
+    - capgemini
+    - tech mahindra
+    - hcl
+    - deloitte
+    - pwc
+    - kpmg
+    - ey
+    - ernst
+    - ibm
+    - l&t
+    - mindtree
+
+  wrong_title_signals:
+    - marketing manager
+    - sales manager
+    - business development
+    - hr manager
+    - human resource
+    - recruiter
+    - talent acquisition
+    - content writer
+    - seo specialist
+    - social media manager
+    - graphic designer
+    - ui designer
+    - ux designer
+    - robotics engineer
+    - speech recognition
+    - autonomous vehicle
+
+  ml_signals_elite:
+    - faiss
+    - hnsw
+    - ann index
+    - approximate nearest neighbor
+    - approximate nearest neighbour
+    - qdrant
+    - milvus
+    - weaviate
+    - pinecone
+    - vector database
+    - two-tower
+    - two tower
+    - bi-encoder
+    - cross-encoder
+    - dense retrieval
+    - hybrid search
+    - ndcg
+    - mrr
+    - map@
+    - learning to rank
+    - offline evaluation
+    - candidate generation
+    - recsys
+    - ranking system
+    - retrieval augmented generation
+    - lora
+    - qlora
+    - bm25
+    - sentence-transformer
+    - sentence transformer
+    - colbert
+    - semantic search
+    - embedding model
+    - ann search
+
+  ml_signals_strong:
+    - deployed to production
+    - production deployment
+    - serving infrastructure
+    - model serving
+    - real-time inference
+    - online inference
+    - a/b test
+    - search system
+    - recommendation system
+    - opensearch
+    - elasticsearch
+    - fine-tun
+    - online eval
+    - retrieval system
+    - re-ranking
+    - reranking
+    - knowledge graph
+    - embedding pipeline
+    - knn
+    - nearest neighbor search
+
+  ml_signals_weak:
+    - embedding
+    - retrieval
+    - transformer
+    - bert
+    - llm
+    - rag 
+    - xgboost
+    - lightgbm
+    - ranking
+    - recommendation
+
+  jd_exact_match_terms:
+    faiss: 5.0
+    hnsw: 5.0
+    two-tower: 5.0
+    two tower: 5.0
+    learning to rank: 4.0
+    candidate generation: 4.0
+    ndcg: 4.0
+    pinecone: 4.0
+    weaviate: 4.0
+    qdrant: 4.0
+    milvus: 4.0
+    ann index: 4.0
+    bm25: 3.5
+    bi-encoder: 3.5
+    cross-encoder: 3.5
+    dense retrieval: 3.5
+    hybrid search: 3.5
+    mrr: 3.0
+    map@: 3.0
+    lora: 3.0
+    qlora: 3.0
+    recsys: 3.0
+    opensearch: 3.0
+    elasticsearch: 3.0
+    sentence-transformer: 3.0
+    bge: 3.0
+    e5: 2.0
+    xgboost: 2.0
+    lightgbm: 2.0
+
+  publication_signals:
+    - neurips
+    - nips
+    - icml
+    - iclr
+    - aaai
+    - acl
+    - emnlp
+    - naacl
+    - kdd
+    - sigir
+    - "www "
+    - wsdm
+    - recsys conference
+    - arxiv
+    - published
+    - research paper
+    - conference paper
+    - proceedings of
+    - patent
+    - open-source
+    - open source
+    - github.com
+    - huggingface.co
+    - hugging face hub
+
+  elite_tech_companies:
+    - google
+    - meta
+    - microsoft
+    - amazon
+    - apple
+    - netflix
+    - openai
+    - anthropic
+    - cohere
+    - hugging face
+    - flipkart
+    - swiggy
+    - zomato
+    - meesho
+    - razorpay
+    - cred
+    - phonepe
+    - paytm
+    - nykaa
+    - urban company
+    - urbanclap
+    - sarvam
+    - krutrim
+    - ola
+    - rapido
+    - juspay
+    - khatabook
+    - sprinklr
+    - clevertap
+    - moengage
+    - sharechat
+    - dailyhunt
+    - browserstack
+    - freshworks
+    - zoho
+    - postman
+    - databricks
+    - snowflake
+    - elastic
+    - algolia
+    - pinecone
+    - weaviate
+    - qdrant
+    - cohere
