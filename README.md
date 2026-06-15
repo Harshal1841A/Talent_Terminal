@@ -9,7 +9,7 @@ app_file: app.py
 pinned: false
 ---
 
-# 🚀 Talent Terminal
+# 🚀 Talent Terminal by Team Rocket
 
 A ruthless, highly-optimized candidate ranking pipeline for the India Runs Data and AI Challenge. Filters and ranks 100K+ profiles using dense retrieval, cross-encoder re-ranking, and strict behavioral heuristics.
 
