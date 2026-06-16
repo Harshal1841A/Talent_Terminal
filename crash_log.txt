@@ -1,5 +1,0 @@
-Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
-Loading Job Description...
-Loading Bi-Encoder and Cross-Encoder models...
-Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights:  84%|########3 | 167/199 [00:00<00:00, 1660.35it/s]Loading weights: 100%|##########| 199/199 [00:00<00:00, 1833.16it/s]
-Loading weights:   0%|          | 0/105 [00:00<?, ?it/s]Loading weights: 100%|##########| 105/105 [00:00<00:00, 2406.04it/s]
