@@ -26,7 +26,8 @@ from core_scoring import (
     HONEYPOT_PENALTY, WRONG_TITLE_PENALTY, CONSULTING_ONLY_PENALTY,
     norm_semantic, build_features, score_experience, score_ml_signals,
     score_saved_by_recruiters, score_github, score_assessment, score_profile_completeness,
-    score_engagement, score_trust, score_behavioral, generate_reasoning
+    score_engagement, score_trust, score_behavioral, generate_reasoning,
+    score_location, score_ml_role_ratio
 )
 
 PREMIUM_CSS = """
@@ -220,6 +221,9 @@ def load_models():
         import joblib
         print("Loading LightGBM reranker...")
         lgb_model = joblib.load(lgb_path)
+        if isinstance(lgb_model, dict) and "model" in lgb_model:
+            lgb_model = lgb_model["model"]
+
         
     return bi, ce, lgb_model
 
@@ -235,7 +239,7 @@ _CE_BATCH_SIZE     = 128   # Predict batch size
 def run_pipeline(
     jd_text: str,
     top_n: int = 100,
-    k_retrieve: int = 2000,
+    k_retrieve: int = 800,
     w_semantic: float = 60.0,
     w_experience: float = 25.0,
     w_company: float = 18.0,
@@ -345,6 +349,10 @@ def run_pipeline(
             else:
                 company_s = (w_company if meta.get("has_product_company") else 0.0) + \
                             (CONSULTING_ONLY_PENALTY if meta.get("consulting_only") else 0.0)
+
+                loc_score    = float(meta.get("location_score", 0.0) or 0.0)
+                ml_ratio_score = float(meta.get("ml_role_ratio", 0.5) or 0.5)
+
                 final = (
                     semantic
                     + score_experience(meta.get("years_exp", 0) or 0, w_experience)
@@ -358,7 +366,9 @@ def run_pipeline(
                     + score_profile_completeness(meta.get("profile_completeness", 50) or 50)
                     + score_engagement(meta)
                     + score_trust(meta)
-                    + meta.get("research_founding_score", 0.0)
+                    + float(meta.get("research_founding_score", 0.0) or 0.0)
+                    + loc_score
+                    + ml_ratio_score
                 )
 
                 lgb_score = max(0.0, float(lgb_preds[i]))
@@ -536,7 +546,7 @@ def build_app():
                         w_edu = gr.Slider(0, 10, value=3,  step=1, label="Tier-1 Education")
                     with gr.Row():
                         top_n = gr.Slider(10, 100, value=100, step=10, label="Results to return")
-                        k_ret = gr.Slider(500, 5000, value=2000, step=500, label="Stage 1 pool size (CE scores top 500)")
+                        k_ret = gr.Slider(500, 5000, value=800, step=100, label="Stage 1 pool size (CE scores top 500)")
 
                 with gr.Row():
                     run_btn   = gr.Button("🚀 Rank Candidates", variant="primary", scale=3, elem_classes=["primary-btn"])

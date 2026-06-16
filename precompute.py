@@ -6,6 +6,7 @@ Produces candidate_db.pkl with 768-dim embeddings + rich feature metadata.
 
 import json
 import pickle
+import re
 import math
 from datetime import date, datetime
 from pathlib import Path
@@ -95,13 +96,13 @@ def count_recency_weighted_ml_signals(career: list, summary: str) -> float:
 
     # Score summary text (no recency — static document)
     for sig in ML_SIGNALS_ELITE:
-        if sig in summary_lower:
+        if re.search(r'\b' + re.escape(sig) + r'\b', summary_lower):
             total_score += 3.0
     for sig in ML_SIGNALS_STRONG:
-        if sig in summary_lower:
+        if re.search(r'\b' + re.escape(sig) + r'\b', summary_lower):
             total_score += 1.5
     for sig in ML_SIGNALS_WEAK:
-        if sig in summary_lower:
+        if re.search(r'\b' + re.escape(sig) + r'\b', summary_lower):
             total_score += 0.3
 
     # Score career history with recency weighting
@@ -122,13 +123,13 @@ def count_recency_weighted_ml_signals(career: list, summary: str) -> float:
         rw = get_recency_weight(years_ago)
 
         for sig in ML_SIGNALS_ELITE:
-            if sig in combined:
+            if re.search(r'\b' + re.escape(sig) + r'\b', combined):
                 total_score += 3.0 * rw
         for sig in ML_SIGNALS_STRONG:
-            if sig in combined:
+            if re.search(r'\b' + re.escape(sig) + r'\b', combined):
                 total_score += 1.5 * rw
         for sig in ML_SIGNALS_WEAK:
-            if sig in combined:
+            if re.search(r'\b' + re.escape(sig) + r'\b', combined):
                 total_score += 0.3 * rw
 
     # BUG-10 FIX: zero signals must return exactly 0.0 — not 0.27
@@ -264,12 +265,12 @@ def extract_features(candidate: dict) -> dict:
     ).lower()
     jd_term_bonus = 0.0
     for term, pts in JD_EXACT_MATCH_TERMS.items():
-        if term in all_text_lower:
+        if re.search(r'\b' + re.escape(term) + r'\b', all_text_lower):
             jd_term_bonus += pts
     jd_term_bonus = min(jd_term_bonus, 20.0)  # hard cap at 20 pts
 
     # ── External validation signal ────────────────────────────────────────────
-    has_external_validation = any(sig in all_text_lower for sig in PUBLICATION_SIGNALS)
+    has_external_validation = any(re.search(r'\b' + re.escape(sig) + r'\b', all_text_lower) for sig in PUBLICATION_SIGNALS)
 
     # ── Elite company signal ──────────────────────────────────────────────────
     companies_lower = [(exp.get("company", "") or "").lower() for exp in career]

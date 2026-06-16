@@ -33,7 +33,7 @@ CONSULTING_ONLY_PENALTY = penalties["CONSULTING_ONLY_PENALTY"]
 TITLE_CHASER_PENALTY    = penalties["TITLE_CHASER_PENALTY"]
 
 
-def norm_semantic(raw_logit: float) -> float:
+def norm_semantic(raw_logit: float, w_semantic: float = W_SEMANTIC) -> float:
     """
     Absolute semantic normalization using a calibrated sigmoid.
     This replaces the broken batch-relative normalization.
@@ -43,7 +43,7 @@ def norm_semantic(raw_logit: float) -> float:
     """
     # Shifted slightly right because CE scores for marginal matches are often negative.
     # A shift of +2 means a logit of -2 gets 50% score.
-    return (1.0 / (1.0 + math.exp(-(raw_logit + 2.0)))) * W_SEMANTIC
+    return (1.0 / (1.0 + math.exp(-(raw_logit + 2.0)))) * w_semantic
 
 
 def score_experience(years: float, w_experience: float = W_EXPERIENCE) -> float:
