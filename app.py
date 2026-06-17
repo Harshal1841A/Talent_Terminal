@@ -1,33 +1,26 @@
-import math, os, tempfile
+import os
+import tempfile
 from pathlib import Path
 from functools import lru_cache
-from datetime import date, datetime
 import html as _html
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 import gradio as gr
 import numpy as np
-import torch
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from sentence_transformers import SentenceTransformer, CrossEncoder
 import pickle
-import re
-
 
 BASE = Path(__file__).parent
 
+from ranking_pipeline import RankingConfig, rank_candidates_core
 from core_scoring import (
-    W_SEMANTIC, W_EXPERIENCE, W_COMPANY_TYPE, W_ML_SIGNALS, W_BEHAVIORAL,
-    W_SAVED_RECRUITERS, W_GITHUB, W_ASSESSMENT, W_PROFILE_COMPLETE,
-    W_EDUCATION, W_ENGAGEMENT, W_TRUST, RRF_K, RRF_WEIGHT,
-    HONEYPOT_PENALTY, WRONG_TITLE_PENALTY, CONSULTING_ONLY_PENALTY,
-    norm_semantic, build_features, score_experience, score_ml_signals,
-    score_saved_by_recruiters, score_github, score_assessment, score_profile_completeness,
-    score_engagement, score_trust, score_behavioral, generate_reasoning,
-    score_location, score_ml_role_ratio
+    reload_config,
+    W_SEMANTIC, W_EXPERIENCE, W_COMPANY_TYPE, W_ML_SIGNALS,
+    W_BEHAVIORAL, W_SAVED_RECRUITERS, W_GITHUB, W_EDUCATION,
 )
 
 PREMIUM_CSS = """
@@ -182,9 +175,13 @@ PREMIUM_CSS = """
         .reasoning-text { font-size: 13px; color: #94a3b8; margin-top: 10px; line-height: 1.5; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 8px; }
 """
 
+_CE_POOL_SIZE = 500
+_CE_BATCH_SIZE = 128
+
+
 @lru_cache(maxsize=1)
 def load_artifacts():
-    db_path   = BASE / "candidate_meta.pkl"
+    db_path = BASE / "candidate_meta.pkl"
     bm25_path = BASE / "bm25_index.pkl"
     faiss_path = BASE / "faiss_index.bin"
     if not db_path.exists():
@@ -199,22 +196,41 @@ def load_artifacts():
             bd = pickle.load(f)
         bm25 = bd["bm25"]
         bm25_ids = {cid: i for i, cid in enumerate(bd["candidate_ids"])}
-        
+
     index = None
     if faiss_path.exists():
         import faiss
         print("Loading faiss_index.bin...")
         index = faiss.read_index(str(faiss_path))
-        
+    else:
+        print("WARNING: faiss_index.bin missing — ranking will fail until precompute.py is run.")
+
     return metadata, bm25, bm25_ids, index
+
 
 @lru_cache(maxsize=1)
 def load_models():
-    print("Loading BGE bi-encoder...")
-    bi  = SentenceTransformer("BAAI/bge-base-en-v1.5")
-    print("Loading MiniLM cross-encoder...")
-    ce  = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
-    
+    local_bge = BASE / "models" / "bge-base-en-v1.5"
+    local_ce = BASE / "models" / "ms-marco-MiniLM-L-6-v2"
+    finetuned_ce = BASE / "models" / "finetuned-ce-model"
+
+    if local_bge.exists():
+        print("Loading BGE bi-encoder from ./models/...")
+        bi = SentenceTransformer(str(local_bge))
+    else:
+        print("Loading BGE bi-encoder from HuggingFace...")
+        bi = SentenceTransformer("BAAI/bge-base-en-v1.5")
+
+    if finetuned_ce.exists():
+        print("Loading fine-tuned cross-encoder from ./models/...")
+        ce = CrossEncoder(str(finetuned_ce))
+    elif local_ce.exists():
+        print("Loading MiniLM cross-encoder from ./models/...")
+        ce = CrossEncoder(str(local_ce))
+    else:
+        print("Loading MiniLM cross-encoder from HuggingFace...")
+        ce = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+
     lgb_model = None
     lgb_path = BASE / "lgbm_reranker.pkl"
     if lgb_path.exists():
@@ -224,214 +240,112 @@ def load_models():
         if isinstance(lgb_model, dict) and "model" in lgb_model:
             lgb_model = lgb_model["model"]
 
-        
     return bi, ce, lgb_model
 
 
+def _default_weights():
+    """Slider defaults from config.yaml (via core_scoring)."""
+    return {
+        "w_semantic": W_SEMANTIC,
+        "w_experience": W_EXPERIENCE,
+        "w_company": W_COMPANY_TYPE,
+        "w_ml": W_ML_SIGNALS,
+        "w_behavioral": W_BEHAVIORAL,
+        "w_saved": W_SAVED_RECRUITERS,
+        "w_github": W_GITHUB,
+        "w_education": W_EDUCATION,
+    }
 
-# Max chars of profile text fed to the cross-encoder.
-# MiniLM-L6 has a hard 512-token limit; ~350 chars ≈ 400 tokens — fast & accurate.
-_CE_DOC_MAX_CHARS  = 1500
-_CE_JD_MAX_CHARS   = 1500   # Keep JD to key requirements only
-_CE_POOL_SIZE      = 500   # Top-N bi-encoder results to re-rank (was 2000)
-_CE_BATCH_SIZE     = 128   # Predict batch size
+
+_DEFAULTS = _default_weights()
+
+reload_config()
+_DEFAULTS = _default_weights()
+
 
 def run_pipeline(
     jd_text: str,
     top_n: int = 100,
     k_retrieve: int = 800,
-    w_semantic: float = 60.0,
-    w_experience: float = 25.0,
-    w_company: float = 18.0,
-    w_ml: float = 20.0,
-    w_behavioral: float = 10.0,
-    w_saved: float = 12.0,
-    w_github: float = 5.0,
-    w_education: float = 3.0,
+    w_semantic: float = W_SEMANTIC,
+    w_experience: float = W_EXPERIENCE,
+    w_company: float = W_COMPANY_TYPE,
+    w_ml: float = W_ML_SIGNALS,
+    w_behavioral: float = W_BEHAVIORAL,
+    w_saved: float = W_SAVED_RECRUITERS,
+    w_github: float = W_GITHUB,
+    w_education: float = W_EDUCATION,
     progress=gr.Progress(),
 ):
     if not jd_text or len(jd_text.strip()) < 50:
-        return "", "❌ JD too short — need at least 50 characters.", None, []
+        return "", "JD too short — need at least 50 characters.", None, []
     try:
         progress(0.05, desc="Loading artifacts...")
         metadata, bm25, bm25_ids, index = load_artifacts()
         progress(0.10, desc="Loading models...")
         bi_enc, cross_enc, lgb_model = load_models()
 
-        progress(0.20, desc="Stage 1: embedding JD...")
-        jd_phrases = [
-            jd_text,
-            "Senior ML engineer information retrieval ranking embeddings FAISS vector search LLMs NLP",
-            "5-9 years experience product company applied machine learning search ranking recommendation",
-            "Python PyTorch TensorFlow scikit-learn Elasticsearch Spark MLOps production deployment",
-        ]
-        phrase_embs = bi_enc.encode(jd_phrases, convert_to_tensor=True, normalize_embeddings=True)
-        jd_emb = phrase_embs.mean(dim=0)
-        jd_emb = jd_emb / jd_emb.norm()
+        defaults = _DEFAULTS
+        weights_match_defaults = (
+            abs(w_semantic - defaults["w_semantic"]) < 0.01
+            and abs(w_experience - defaults["w_experience"]) < 0.01
+            and abs(w_company - defaults["w_company"]) < 0.01
+            and abs(w_ml - defaults["w_ml"]) < 0.01
+            and abs(w_behavioral - defaults["w_behavioral"]) < 0.01
+            and abs(w_saved - defaults["w_saved"]) < 0.01
+            and abs(w_github - defaults["w_github"]) < 0.01
+            and abs(w_education - defaults["w_education"]) < 0.01
+        )
+        submission_like = top_n == 100 and k_retrieve == 800 and weights_match_defaults
 
-        progress(0.30, desc="Stage 1: dense retrieval over 100K candidates...")
-        k = min(k_retrieve, len(metadata))
-        jd_emb_np = jd_emb.numpy().reshape(1, -1)
-        _, I = index.search(jd_emb_np, k)
-        top_idx = I[0].tolist()
-
-        bm25_rank_lookup = {}
-        if bm25:
-            tokens = re.findall(r"[a-z0-9][a-z0-9\-]*[a-z0-9]|[a-z0-9]", jd_text.lower())
-            bm25_scores_arr = bm25.get_scores(tokens)
-            for pos, ridx in enumerate(sorted(range(len(bm25_scores_arr)), key=lambda i: -bm25_scores_arr[i]), 1):
-                bm25_rank_lookup[ridx] = pos
-
-        bienc_rank = {idx: r+1 for r, idx in enumerate(top_idx)}
-
-        # ── Stage 2: Cross-encoder re-ranking ─────────────────────────────────
-        # Only re-rank the top _CE_POOL_SIZE from the bi-encoder — the rest are
-        # scored with a sentinel value and rely on heuristics + RRF alone.
-        # This is the single biggest speedup: 2000 → 500 pairs = 4x faster.
-        ce_pool_idx  = top_idx[:_CE_POOL_SIZE]   # top bi-encoder candidates
-        rest_idx     = top_idx[_CE_POOL_SIZE:]    # beyond CE pool
-
-        # Truncate inputs — MiniLM has a hard 512-token limit.
-        # Sending 2000-char docs wastes time on tokens that get clipped anyway.
-        jd_short = jd_text[:_CE_JD_MAX_CHARS]
-        ce_inputs = [
-            [jd_short, (metadata[i]["doc_text"] or "")[:_CE_DOC_MAX_CHARS]]
-            for i in ce_pool_idx
-        ]
-
-        n_ce = len(ce_inputs)
-        progress(0.50, desc=f"Stage 2: cross-encoder over {n_ce} candidates (pool={_CE_POOL_SIZE})...")
-
-        ce_scores_pool = []
-        for start in range(0, n_ce, _CE_BATCH_SIZE):
-            batch = ce_inputs[start : start + _CE_BATCH_SIZE]
-            scores = cross_enc.predict(batch, show_progress_bar=False)
-            if isinstance(scores, (list, np.ndarray)):
-                ce_scores_pool.extend(float(s) for s in scores)
-            else:
-                ce_scores_pool.append(float(scores))
-            progress(
-                0.50 + 0.20 * (start + len(batch)) / n_ce,
-                desc=f"Stage 2: cross-encoder ({min(start + len(batch), n_ce)}/{n_ce})...",
+        cfg = (
+            RankingConfig(apply_mmr=True, top_n=100, k_retrieve=800)
+            if submission_like
+            else RankingConfig(
+                k_retrieve=int(k_retrieve),
+                ce_pool_size=_CE_POOL_SIZE,
+                ce_batch_size=_CE_BATCH_SIZE,
+                top_n=int(top_n),
+                apply_mmr=top_n == 100,
+                w_semantic=w_semantic,
+                w_experience=w_experience,
+                w_company=w_company,
+                w_ml=w_ml,
+                w_behavioral=w_behavioral,
+                w_saved=w_saved,
+                w_github=w_github,
+                w_education=w_education,
             )
+        )
 
-        ce_scores_pool = np.array(ce_scores_pool, dtype=np.float32)
+        if index is None:
+            return "", (
+                "faiss_index.bin is missing. Run precompute.py locally, "
+                "or upload precomputed artifacts to this Space."
+            ), None, []
 
-        # Assign sentinel score (min of pool) to candidates outside the CE pool
-        ce_sentinel = float(ce_scores_pool.min()) if len(ce_scores_pool) else -9.0
-        ce_score_map = {idx: float(ce_scores_pool[i]) for i, idx in enumerate(ce_pool_idx)}
-        for idx in rest_idx:
-            ce_score_map[idx] = ce_sentinel
+        def _progress(frac, desc=""):
+            progress(frac, desc=desc)
 
-        # Rebuild full arrays in original top_idx order
-        ce_scores_arr = np.array([ce_score_map[idx] for idx in top_idx], dtype=np.float32)
+        top = rank_candidates_core(
+            jd_text=jd_text,
+            metadata=metadata,
+            faiss_index=index,
+            bi_enc=bi_enc,
+            cross_enc=cross_enc,
+            bm25=bm25,
+            bm25_candidate_ids=bm25_ids,
+            lgb_model=lgb_model,
+            config=cfg,
+            progress=_progress,
+        )
 
-        # Using imported norm_semantic from core_scoring.py
-
-        if lgb_model is not None:
-            progress(0.70, desc="Predicting LightGBM scores...")
-            X_lgb = np.array([build_features(metadata[idx]) for idx in top_idx], dtype=np.float32)
-            lgb_preds = lgb_model.predict(X_lgb)
-        else:
-            lgb_preds = np.zeros(len(top_idx))
-
-        progress(0.80, desc="Stage 3: heuristic scoring + RRF...")
-        results = []
-        for i, oidx in enumerate(top_idx):
-            meta = metadata[oidx]
-            raw_ce = float(ce_scores_arr[i])
-            semantic = norm_semantic(raw_ce, w_semantic)
-
-            if meta.get("honeypot"):
-                final = HONEYPOT_PENALTY
-            elif meta.get("wrong_title"):
-                final = WRONG_TITLE_PENALTY + semantic
-            else:
-                company_s = (w_company if meta.get("has_product_company") else 0.0) + \
-                            (CONSULTING_ONLY_PENALTY if meta.get("consulting_only") else 0.0)
-
-                loc_score    = float(meta.get("location_score", 0.0) or 0.0)
-                ml_ratio_score = float(meta.get("ml_role_ratio", 0.5) or 0.5)
-
-                final = (
-                    semantic
-                    + score_experience(meta.get("years_exp", 0) or 0, w_experience)
-                    + company_s
-                    + score_ml_signals(meta.get("ml_signal_count", 0) or 0, w_ml)
-                    + score_behavioral(meta, w_behavioral)
-                    + score_github(meta.get("github_score", -1) or -1, w_github)
-                    + score_assessment(meta.get("core_skill_score", -1) or -1, meta.get("avg_assessment", -1) or -1)
-                    + (w_education if meta.get("edu_tier_1") else 0.0)
-                    + score_saved_by_recruiters(meta.get("saved_by_recruiters", 0) or 0, w_saved)
-                    + score_profile_completeness(meta.get("profile_completeness", 50) or 50)
-                    + score_engagement(meta)
-                    + score_trust(meta)
-                    + float(meta.get("research_founding_score", 0.0) or 0.0)
-                    + loc_score
-                    + ml_ratio_score
-                )
-
-                lgb_score = max(0.0, float(lgb_preds[i]))
-                meta["lgbm_score"] = lgb_score
-                final = final * (1.0 + 0.3 * lgb_score)
-
-                if (meta.get("skill_count", 0) or 0) > 80 and (meta.get("years_exp", 0) or 0) < 3:
-                    final -= 50
-
-            results.append({
-                "candidate_id": meta["candidate_id"],
-                "score": final,
-                "raw_ce": raw_ce,
-                "bienc_rank": bienc_rank[oidx],
-                "reasoning": "",  # generated post-RRF so text reflects true final score
-                "meta": meta,
-            })
-
-        # BUG-03 FIX: old filter `score > WRONG_TITLE_PENALTY` included wrong_title candidates
-        # (score ≈ -492 > -500), giving them valid CE ranks and up to +10 RRF boost.
-        eligible = [r for r in results if not r["meta"].get("honeypot") and not r["meta"].get("wrong_title")]
-        for pos, r in enumerate(sorted(eligible, key=lambda x: -x["raw_ce"]), 1):
-            r["ce_rank"] = pos
-        for r in results:
-            r.setdefault("ce_rank", 9999)
-
-        # BUG-03 FIX: same guard — only apply RRF boost to genuinely eligible candidates
-        for r in results:
-            if not r["meta"].get("honeypot") and not r["meta"].get("wrong_title"):
-                rrf_b = 1.0 / (RRF_K + r["bienc_rank"])
-                rrf_c = 1.0 / (RRF_K + r["ce_rank"])
-                if bm25 and r["candidate_id"] in bm25_ids:
-                    ridx = bm25_ids[r["candidate_id"]]
-                    rrf_bm = 1.0 / (RRF_K + bm25_rank_lookup.get(ridx, 99999))
-                    rrf_score = rrf_b + rrf_c + rrf_bm
-                    rrf_max = 3.0 / (RRF_K + 1)
-                else:
-                    rrf_score = rrf_b + rrf_c
-                    rrf_max = 2.0 / (RRF_K + 1)
-
-                r["score"] += (rrf_score / rrf_max) * RRF_WEIGHT
-
-        results.sort(key=lambda x: (-x["score"], x["candidate_id"]))
-        top = results[:top_n]
-        for rank, r in enumerate(top, 1):
-            r["rank"] = rank
-
-        # FIX: generate reasoning AFTER RRF so the text reflects the true displayed score
-        for r in top:
-            r["reasoning"] = generate_reasoning(r["meta"], r["raw_ce"], r["score"])
-
-        # FIX: honest Recruiter Demand signal — normalized historical saves in this result set.
-        # Removed the LR model (trained on saved_by_recruiters labels then scored on same
-        # data — pure leakage). This shows actual recruiter market interest for each candidate.
         max_saves = max((r["meta"].get("saved_by_recruiters", 0) or 0 for r in top), default=1)
         max_saves = max(max_saves, 1)
         for r in top:
             saves = r["meta"].get("saved_by_recruiters", 0) or 0
             r["recruiter_demand"] = round((saves / max_saves) * 100.0)
 
-        # BUG-04 FIX: max_score must never be negative. When most candidates are
-        # disqualified, max() returns a negative, inverting score bars (worst candidate
-        # gets 100% bar width). Use only positive scores for normalization.
         _pos_scores = [r["score"] for r in top if r["score"] > 0]
         max_score = max(_pos_scores, default=1)
         html_cards = []
@@ -440,7 +354,7 @@ def run_pipeline(
             score = r["score"]
             meta = r["meta"]
             score_pct = max(0, min(100, (score / max_score) * 100))
-            
+
             if rank <= 3:
                 badge_cls = "rank-badge-elite"
             elif rank <= 10:
@@ -457,11 +371,15 @@ def run_pipeline(
                 signals.append('<span class="signal-chip">TIER 1 EDU</span>')
             if meta.get("consulting_only"):
                 signals.append('<span class="signal-chip" style="color: #ef4444;">CONSULTING ONLY</span>')
-                
+
             recruiter_demand_html = ""
             if r.get("recruiter_demand", 0) > 0:
                 _saves = meta.get("saved_by_recruiters", 0) or 0
-                recruiter_demand_html = f'<span class="signal-chip" style="color: #a1d489; border-color: #467434;" title="{_saves} recruiters saved this candidate in the last 30 days">DEMAND: {r["recruiter_demand"]}%</span>'
+                recruiter_demand_html = (
+                    f'<span class="signal-chip" style="color: #a1d489; border-color: #467434;" '
+                    f'title="{_saves} recruiters saved this candidate in the last 30 days">'
+                    f'DEMAND: {r["recruiter_demand"]}%</span>'
+                )
 
             title = _html.escape(str(meta.get("current_title", "Unknown Role") or "Unknown Role"))
             company = _html.escape(str(meta.get("current_company", "") or ""))
@@ -493,7 +411,7 @@ def run_pipeline(
                 </div>
             </div>
             ''')
-            
+
         full_html = f'''
         <style>{PREMIUM_CSS}</style>
         <div style="background: var(--deep-bg); padding: 20px; border-radius: 8px;">
@@ -501,29 +419,31 @@ def run_pipeline(
         </div>
         '''
 
-        fig, ax = plt.subplots(figsize=(9,3))
-        # BUG-16 FIX: clamp chart values to 0 — disqualified candidates have scores of
-        # -9999 (honeypot) and -492 (wrong_title). Including them destroys the Y-axis
-        # scale, making all positive scores look identical at the top.
+        fig, ax = plt.subplots(figsize=(9, 3))
         scores = [max(r["score"], 0) for r in top]
-        ax.bar(range(1, len(scores)+1), scores, color="#F58F20", alpha=0.8, width=0.8)
+        ax.bar(range(1, len(scores) + 1), scores, color="#F58F20", alpha=0.8, width=0.8)
         if scores:
-            ax.axhline(sum(scores)/len(scores), color="#467434", linestyle="--", label="Mean")
-        ax.set_xlabel("Rank"); ax.set_ylabel("Score"); ax.set_title("Score distribution")
-        ax.legend(); plt.tight_layout()
+            ax.axhline(sum(scores) / len(scores), color="#467434", linestyle="--", label="Mean")
+        ax.set_xlabel("Rank")
+        ax.set_ylabel("Score")
+        ax.set_title("Score distribution")
+        ax.legend()
+        plt.tight_layout()
 
-        progress(1.0, desc="Done!")
-        return full_html, f"✅ Ranked {len(top)} candidates from {k:,} retrieved. BGE + BM25 → MiniLM → RRF.", fig, top
+        mode = "submission-equivalent" if weights_match_defaults else "custom weights"
+        status = (
+            f"Ranked {len(top)} candidates from {min(k_retrieve, len(metadata)):,} retrieved "
+            f"(BGE + BM25 -> MiniLM -> RRF, {mode})."
+        )
+        return full_html, status, fig, top
 
     except Exception as e:
         import traceback
-        return f"<div>Error: {e}</div>", f"\u274c Error: {e}\n{traceback.format_exc()}", None, []
+        return f"<div>Error: {e}</div>", f"Error: {e}\n{traceback.format_exc()}", None, []
+
 
 def build_app():
-    with gr.Blocks(
-        title="TALENT_TERMINAL",
-    ) as demo:
-
+    with gr.Blocks(title="TALENT_TERMINAL") as demo:
         gr.Markdown("# <span class='logo-dot'></span>TALENT_TERMINAL — Candidate Ranking Pipeline")
         gr.Markdown("BGE Dense + BM25 Sparse → MiniLM Cross-Encoder → Heuristic Modifiers + RRF")
 
@@ -531,61 +451,65 @@ def build_app():
             with gr.Column(scale=2):
                 jd_input = gr.Textbox(label="Job Description", lines=14, placeholder="Paste full JD here...")
 
-                with gr.Accordion("⚙️ Weight Tuning", open=False):
+                with gr.Accordion("Weight Tuning", open=False):
                     with gr.Row():
-                        w_sem = gr.Slider(20, 80, value=60, step=1, label="Semantic (Cross-Encoder)")
-                        w_exp = gr.Slider(5, 40, value=25, step=1, label="Experience Years")
+                        w_sem = gr.Slider(20, 80, value=W_SEMANTIC, step=1, label="Semantic (Cross-Encoder)")
+                        w_exp = gr.Slider(5, 40, value=W_EXPERIENCE, step=1, label="Experience Years")
                     with gr.Row():
-                        w_co  = gr.Slider(5, 30, value=18, step=1, label="Product Company")
-                        w_ml  = gr.Slider(5, 30, value=20, step=1, label="Production ML Signals")
+                        w_co = gr.Slider(5, 30, value=W_COMPANY_TYPE, step=1, label="Product Company")
+                        w_ml = gr.Slider(5, 30, value=W_ML_SIGNALS, step=1, label="Production ML Signals")
                     with gr.Row():
-                        w_beh = gr.Slider(2, 20, value=10, step=1, label="Behavioral/Availability")
-                        w_sav = gr.Slider(2, 20, value=12, step=1, label="Saved by Recruiters")
+                        w_beh = gr.Slider(2, 20, value=W_BEHAVIORAL, step=1, label="Behavioral/Availability")
+                        w_sav = gr.Slider(2, 20, value=W_SAVED_RECRUITERS, step=1, label="Saved by Recruiters")
                     with gr.Row():
-                        w_gh  = gr.Slider(0, 15, value=5,  step=1, label="GitHub Activity")
-                        w_edu = gr.Slider(0, 10, value=3,  step=1, label="Tier-1 Education")
+                        w_gh = gr.Slider(0, 15, value=W_GITHUB, step=1, label="GitHub Activity")
+                        w_edu = gr.Slider(0, 10, value=W_EDUCATION, step=1, label="Tier-1 Education")
                     with gr.Row():
                         top_n = gr.Slider(10, 100, value=100, step=10, label="Results to return")
                         k_ret = gr.Slider(500, 5000, value=800, step=100, label="Stage 1 pool size (CE scores top 500)")
 
                 with gr.Row():
-                    run_btn   = gr.Button("🚀 Rank Candidates", variant="primary", scale=3, elem_classes=["primary-btn"])
-                    clear_btn = gr.Button("🗑️ Clear", scale=1)
+                    run_btn = gr.Button("Rank Candidates", variant="primary", scale=3, elem_classes=["primary-btn"])
+                    clear_btn = gr.Button("Clear", scale=1)
 
                 status = gr.Textbox(label="Status", interactive=False, lines=2)
 
             with gr.Column(scale=1):
                 gr.Markdown("""
 ### How it works
-**Stage 1** — BGE bi-encoder + BM25 → top 2,000
+**Stage 1** — BGE bi-encoder + BM25 → top 800
 
 **Stage 2** — MiniLM cross-encoder reads JD + profile simultaneously
 
 **Stage 3** — Gaussian experience curve, product company bonus, consulting penalty, behavioral availability, GitHub, assessments, RRF fusion
 
 **Disqualifiers**
-- 🚫 Honeypot profiles
-- 🚫 Wrong current title
-- ⚠️ Consulting-only (−25pts)
+- Honeypot profiles
+- Wrong current title
+- Consulting-only (-25pts)
+- Title-chasers (-12pts)
+
+Default weights + top 100 uses the same MMR pass as `rank.py`.
                 """)
 
         with gr.Tabs():
-            with gr.TabItem("📋 Results"):
+            with gr.TabItem("Results"):
                 results_html = gr.HTML(label="Results")
-            with gr.TabItem("📈 Score Distribution"):
+            with gr.TabItem("Score Distribution"):
                 score_plot = gr.Plot()
-            with gr.TabItem("📥 Download CSV"):
-                dl_btn  = gr.Button("Generate submission.csv", variant="secondary")
+            with gr.TabItem("Download CSV"):
+                dl_btn = gr.Button("Generate submission.csv", variant="secondary")
                 dl_file = gr.File(label="Download", visible=False)
 
         state = gr.State([])
 
         def on_download(res):
-            if not res: return gr.update(visible=False)
+            if not res:
+                return gr.update(visible=False)
             tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8", newline="")
             import csv as _csv
             w = _csv.writer(tmp)
-            w.writerow(["candidate_id","rank","score","reasoning"])
+            w.writerow(["candidate_id", "rank", "score", "reasoning"])
             for r in res:
                 w.writerow([r["candidate_id"], r["rank"], f"{r['score']:.4f}", r["reasoning"]])
             tmp.close()
@@ -604,6 +528,7 @@ def build_app():
 
     return demo
 
+
 if __name__ == "__main__":
     custom_theme = gr.themes.Default(
         primary_hue=gr.themes.colors.orange,
@@ -618,7 +543,7 @@ if __name__ == "__main__":
         block_label_text_color="#e8e1db",
         block_label_text_color_dark="#e8e1db",
         body_text_color="#e8e1db",
-        body_text_color_dark="#e8e1db"
+        body_text_color_dark="#e8e1db",
     )
     app = build_app()
     app.queue(max_size=3)

@@ -1,81 +1,75 @@
-import os
+"""
+Evaluate a ranking submission CSV against gold labels.
+
+Usage:
+  python build_proxy_gold.py --min-relevance 1
+  python rank.py
+  python self_eval.py --submission "Team Rocket.csv" --gold gold_labels_proxy.csv
+"""
+
 import argparse
-import pandas as pd
-import numpy as np
+import csv
+import sys
+from pathlib import Path
 
-def dcg_at_k(r, k):
-    """Discounted Cumulative Gain at K"""
-    r = np.asarray(r, dtype=float)[:k]
-    if r.size:
-        return np.sum((2**r - 1) / np.log2(np.arange(2, r.size + 2)))
-    return 0.
+from eval_metrics import evaluate_ranking
 
-def ndcg_at_k(r, k, ground_truth):
-    """Normalized Discounted Cumulative Gain at K"""
-    dcg_max = dcg_at_k(sorted(ground_truth, reverse=True), k)
-    if not dcg_max:
-        return 0.
-    return dcg_at_k(r, k) / dcg_max
+BASE = Path(__file__).parent
 
-def average_precision(r):
-    """Average Precision"""
-    r = np.asarray(r) != 0
-    out = [np.mean(r[:i+1]) for i in range(r.size) if r[i]]
-    if not out:
-        return 0.
-    return np.mean(out)
 
-def calculate_metrics(submission_file, gold_file, k=10):
-    print(f"Loading submission: {submission_file}")
-    sub_df = pd.read_csv(submission_file)
-    
-    if not os.path.exists(gold_file):
-        print(f"Gold file '{gold_file}' not found. Generating a synthetic one for demonstration...")
-        # Synthesize a gold file for demonstration (random subset of the top candidates)
-        gold_df = pd.DataFrame({
-            'candidate_id': sub_df['candidate_id'].sample(n=min(50, len(sub_df)), random_state=42),
-            'relevance': np.random.choice([1, 2, 3], size=min(50, len(sub_df)), p=[0.5, 0.3, 0.2])
-        })
-        gold_df.to_csv(gold_file, index=False)
-        print(f"Saved synthetic gold labels to {gold_file}.")
-    else:
-        gold_df = pd.read_csv(gold_file)
-    
-    gold_map = dict(zip(gold_df['candidate_id'], gold_df['relevance']))
-    
-    # Map ranked candidates to their relevance scores
-    ranked_relevance = [gold_map.get(cid, 0) for cid in sub_df['candidate_id']]
-    
-    # All non-zero relevance scores in the gold set
-    all_relevance_scores = [rel for rel in gold_map.values() if rel > 0]
-    
-    ndcg = ndcg_at_k(ranked_relevance, k, all_relevance_scores)
-    
-    # Binarize relevance for MAP and MRR (relevance > 0 is relevant)
-    binary_relevance = [1 if r > 0 else 0 for r in ranked_relevance]
-    ap = average_precision(binary_relevance[:k])
-    
-    # Mean Reciprocal Rank
-    try:
-        first_relevant_idx = binary_relevance.index(1) + 1
-        mrr = 1.0 / first_relevant_idx
-    except ValueError:
-        mrr = 0.0
-        
-    print("\n=== Evaluation Results ===")
-    print(f"NDCG@{k}: {ndcg:.4f}")
-    print(f"MAP@{k}:  {ap:.4f}")
-    print(f"MRR:     {mrr:.4f}")
-    print("==========================")
-    
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Evaluate ranking pipeline output against a gold set.")
-    parser.add_argument("--submission", default="submission.csv", help="Path to the ranking submission CSV.")
-    parser.add_argument("--gold", default="gold_labels.csv", help="Path to the gold labels CSV.")
-    parser.add_argument("--k", type=int, default=10, help="Cutoff K for metrics (e.g., NDCG@K).")
+def load_gold_map(path: Path) -> dict[str, int]:
+    gold = {}
+    with open(path, newline="", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            rel = row.get("manual_relevance") or row.get("relevance")
+            if rel is None or str(rel).strip() == "":
+                continue
+            gold[row["candidate_id"]] = int(float(rel))
+    return gold
+
+
+def load_submission_ids(path: Path) -> list[str]:
+    with open(path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        return [row["candidate_id"] for row in reader]
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Evaluate ranking output against gold labels.")
+    parser.add_argument("--submission", default="Team Rocket.csv")
+    parser.add_argument("--gold", default="gold_labels_proxy.csv")
+    parser.add_argument("--k", type=int, default=10)
     args = parser.parse_args()
-    
-    if not os.path.exists(args.submission):
-        print(f"Error: Submission file '{args.submission}' not found. Please run rank.py first.")
-    else:
-        calculate_metrics(args.submission, args.gold, args.k)
+
+    sub_path = BASE / args.submission
+    gold_path = BASE / args.gold
+
+    if not sub_path.exists():
+        print(f"Error: submission file not found: {sub_path}")
+        print("Run rank.py first.")
+        sys.exit(1)
+
+    if not gold_path.exists():
+        print(f"Error: gold file not found: {gold_path}")
+        print("Run: python build_proxy_gold.py --min-relevance 1")
+        print("Or:  python sample_for_labeling.py  (for manual labeling)")
+        sys.exit(1)
+
+    gold_map = load_gold_map(gold_path)
+    if not gold_map:
+        print(f"Error: no labels in {gold_path}")
+        sys.exit(1)
+
+    ranked_ids = load_submission_ids(sub_path)
+    metrics = evaluate_ranking(ranked_ids, gold_map, k=args.k)
+
+    print(f"Submission: {sub_path.name} ({len(ranked_ids)} rows)")
+    print(f"Gold labels: {gold_path.name} ({len(gold_map):,} labeled)")
+    print("\n=== Evaluation Results ===")
+    for key, val in metrics.items():
+        print(f"{key}: {val:.4f}")
+    print("==========================")
+
+
+if __name__ == "__main__":
+    main()

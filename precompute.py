@@ -72,7 +72,7 @@ def get_seniority(title: str) -> int:
     for kw, rank in sorted(SENIORITY_RANK.items(), key=lambda x: -x[1]):
         if kw and kw in t:
             return rank
-    return 1  # base level
+    return 0  # base level
 
 def get_recency_weight(years_ago: float) -> float:
     if years_ago <= 1.0: return 1.0
@@ -242,8 +242,21 @@ def extract_features(candidate: dict) -> dict:
     # were incorrectly granting has_product_company = True before this fix.
     companies = [exp.get("company", "").strip() for exp in career if exp.get("company", "").strip()]
     consulting_flags = [is_consulting(c) for c in companies]
-    has_product_company = any(not f for f in consulting_flags)
+    current_company = (profile.get("current_company", "") or "").strip()
+    if not current_company and career:
+        current_company = (career[0].get("company", "") or "").strip()
+    current_consulting = is_consulting(current_company)
+    non_consulting_months = sum(
+        (exp.get("duration_months") or 0)
+        for exp in career
+        if not is_consulting((exp.get("company", "") or "").strip())
+    )
     consulting_only = all(consulting_flags) and len(companies) > 0
+    has_product_company = (
+        not consulting_only
+        and non_consulting_months >= 24
+        and not current_consulting
+    )
 
     # ── Title check ───────────────────────────────────────────────────────
     current_title = profile.get("current_title", "") or ""
@@ -398,6 +411,7 @@ def extract_features(candidate: dict) -> dict:
         "honeypot": honeypot,
         "has_product_company": has_product_company,
         "consulting_only": consulting_only,
+        "current_consulting": current_consulting,
         "wrong_title": wrong_title,
         "ml_signal_count": ml_signal_count,
         "jd_term_bonus": jd_term_bonus,               # NEW: T1-C

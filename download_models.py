@@ -62,7 +62,7 @@ for label, path in [("BGE model", BGE_LOCAL), ("MiniLM model", MINIML_LOCAL)]:
         print(f"  {label}: {mb:.1f} MB  ({path})")
 
 # Check total artifact budget
-pkl_files = ["candidate_db.pkl", "bm25_index.pkl", "lgbm_reranker.pkl"]
+pkl_files = ["candidate_meta.pkl", "faiss_index.bin", "bm25_index.pkl", "lgbm_reranker.pkl"]
 pkl_total = sum(
     (BASE / f).stat().st_size for f in pkl_files if (BASE / f).exists()
 ) / (1024 ** 2)

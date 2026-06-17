@@ -1,56 +1,58 @@
-# Talent Terminal Configuration
-
 weights:
-  W_SEMANTIC: 60
-  W_EXPERIENCE: 25
-  W_COMPANY_TYPE: 18
-  W_ML_SIGNALS: 20
-  W_BEHAVIORAL: 10
-  W_SAVED_RECRUITERS: 12
-  W_GITHUB: 5
+  W_SEMANTIC: 52.23
+  W_EXPERIENCE: 26.35
+  W_COMPANY_TYPE: 11.18
+  W_ML_SIGNALS: 23.71
+  W_BEHAVIORAL: 14.16
+  W_SAVED_RECRUITERS: 17.74
+  W_GITHUB: 6.26
   W_ASSESSMENT: 5
   W_PROFILE_COMPLETE: 4
-  W_EDUCATION: 3
+  W_EDUCATION: 0.75
   W_RECENCY: 3
   W_ENGAGEMENT: 3
   W_TRUST: 2
-  W_LOCATION: 5
-  W_ML_RATIO: 12
-  RRF_K: 60
-  RRF_WEIGHT: 10
-
+  W_LOCATION: 11.26
+  W_ML_RATIO: 19.36
+  RRF_K: 50
+  RRF_WEIGHT: 8.12
 penalties:
   HONEYPOT_PENALTY: -9999
   WRONG_TITLE_PENALTY: -500
   CONSULTING_ONLY_PENALTY: -25
   TITLE_CHASER_PENALTY: -12
-
+  LONG_NOTICE_PENALTY: -18
+  INTERNATIONAL_PENALTY: -28
+  OFFSITE_LOCATION_PENALTY: -14
+  KEYWORD_STUFFER_PENALTY: -45
+  CURRENT_CONSULTING_PENALTY: -18
+lgbm_score_multiplier: 0.15
 heuristics:
   ml_role_titles:
-    - ml engineer
-    - machine learning
-    - ai engineer
-    - nlp engineer
-    - data scientist
-    - applied scientist
-    - search engineer
-    - recommendation
-    - ranking engineer
-    - research scientist
-    - deep learning
-    - computer vision
-    - ir engineer
-    - applied ml
-    - ml researcher
-    - ai researcher
-    - speech
-    - nlp
-
+  - ml engineer
+  - machine learning
+  - ai engineer
+  - nlp engineer
+  - data scientist
+  - applied scientist
+  - search engineer
+  - recommendation
+  - ranking engineer
+  - research scientist
+  - deep learning
+  - computer vision
+  - ir engineer
+  - applied ml
+  - ml researcher
+  - ai researcher
+  - speech
+  - nlp
   seniority_rank:
     intern: 0
     junior: 0
     associate: 0
-    "": 1
+    ? ''
+    : 1
     senior: 2
     staff: 3
     lead: 3
@@ -58,114 +60,119 @@ heuristics:
     head: 4
     director: 5
     vp: 5
-
   consulting_firms:
-    - tcs
-    - tata consultancy
-    - infosys
-    - wipro
-    - cognizant
-    - accenture
-    - capgemini
-    - tech mahindra
-    - hcl
-    - deloitte
-    - pwc
-    - kpmg
-    - ey
-    - ernst
-    - ibm
-    - l&t
-    - mindtree
-
+  - tcs
+  - tata consultancy
+  - infosys
+  - wipro
+  - cognizant
+  - accenture
+  - capgemini
+  - tech mahindra
+  - hcl
+  - deloitte
+  - pwc
+  - kpmg
+  - ey
+  - ernst
+  - ibm
+  - l&t
+  - mindtree
+  - genpact
+  - mphasis
+  - ltimindtree
+  - lt infotech
+  - persistent
+  - cyient
+  - sonata
+  - birlasoft
+  - zensar
+  - hexaware
+  - niit technologies
   wrong_title_signals:
-    - marketing manager
-    - sales manager
-    - business development
-    - hr manager
-    - human resource
-    - recruiter
-    - talent acquisition
-    - content writer
-    - seo specialist
-    - social media manager
-    - graphic designer
-    - ui designer
-    - ux designer
-    - robotics engineer
-    - speech recognition
-    - autonomous vehicle
-
+  - marketing manager
+  - sales manager
+  - business development
+  - hr manager
+  - human resource
+  - recruiter
+  - talent acquisition
+  - content writer
+  - seo specialist
+  - social media manager
+  - graphic designer
+  - ui designer
+  - ux designer
+  - robotics engineer
+  - speech recognition
+  - autonomous vehicle
   ml_signals_elite:
-    - faiss
-    - hnsw
-    - ann index
-    - approximate nearest neighbor
-    - approximate nearest neighbour
-    - qdrant
-    - milvus
-    - weaviate
-    - pinecone
-    - vector database
-    - two-tower
-    - two tower
-    - bi-encoder
-    - cross-encoder
-    - dense retrieval
-    - hybrid search
-    - ndcg
-    - mrr
-    - map@
-    - learning to rank
-    - offline evaluation
-    - candidate generation
-    - recsys
-    - ranking system
-    - retrieval augmented generation
-    - lora
-    - qlora
-    - bm25
-    - sentence-transformer
-    - sentence transformer
-    - colbert
-    - semantic search
-    - embedding model
-    - ann search
-
+  - faiss
+  - hnsw
+  - ann index
+  - approximate nearest neighbor
+  - approximate nearest neighbour
+  - qdrant
+  - milvus
+  - weaviate
+  - pinecone
+  - vector database
+  - two-tower
+  - two tower
+  - bi-encoder
+  - cross-encoder
+  - dense retrieval
+  - hybrid search
+  - ndcg
+  - mrr
+  - map@
+  - learning to rank
+  - offline evaluation
+  - candidate generation
+  - recsys
+  - ranking system
+  - retrieval augmented generation
+  - lora
+  - qlora
+  - bm25
+  - sentence-transformer
+  - sentence transformer
+  - colbert
+  - semantic search
+  - embedding model
+  - ann search
   ml_signals_strong:
-    - deployed to production
-    - production deployment
-    - serving infrastructure
-    - model serving
-    - real-time inference
-    - online inference
-    - a/b test
-    - search system
-    - recommendation system
-    - opensearch
-    - elasticsearch
-    - fine-tun
-    - online eval
-    - retrieval system
-    - re-ranking
-    - reranking
-    - knowledge graph
-    - embedding pipeline
-    - knn
-    - nearest neighbor search
-
+  - deployed to production
+  - production deployment
+  - serving infrastructure
+  - model serving
+  - real-time inference
+  - online inference
+  - a/b test
+  - search system
+  - recommendation system
+  - opensearch
+  - elasticsearch
+  - fine-tun
+  - online eval
+  - retrieval system
+  - re-ranking
+  - reranking
+  - knowledge graph
+  - embedding pipeline
+  - knn
+  - nearest neighbor search
   ml_signals_weak:
-    - embedding
-    - retrieval
-    - transformer
-    - bert
-    - llm
-    - rag 
-    - xgboost
-    - lightgbm
-    - ranking
-    - recommendation
-
+  - embedding
+  - retrieval
+  - transformer
+  - bert
+  - llm
+  - rag
+  - xgboost
+  - lightgbm
+  - ranking
+  - recommendation
   jd_exact_match_terms:
     faiss: 5.0
     hnsw: 5.0
@@ -196,75 +203,73 @@ heuristics:
     e5: 2.0
     xgboost: 2.0
     lightgbm: 2.0
-
   publication_signals:
-    - neurips
-    - nips
-    - icml
-    - iclr
-    - aaai
-    - acl
-    - emnlp
-    - naacl
-    - kdd
-    - sigir
-    - "www "
-    - wsdm
-    - recsys conference
-    - arxiv
-    - published
-    - research paper
-    - conference paper
-    - proceedings of
-    - patent
-    - open-source
-    - open source
-    - github.com
-    - huggingface.co
-    - hugging face hub
-
+  - neurips
+  - nips
+  - icml
+  - iclr
+  - aaai
+  - acl
+  - emnlp
+  - naacl
+  - kdd
+  - sigir
+  - 'www '
+  - wsdm
+  - recsys conference
+  - arxiv
+  - published
+  - research paper
+  - conference paper
+  - proceedings of
+  - patent
+  - open-source
+  - open source
+  - github.com
+  - huggingface.co
+  - hugging face hub
   elite_tech_companies:
-    - google
-    - meta
-    - microsoft
-    - amazon
-    - apple
-    - netflix
-    - openai
-    - anthropic
-    - cohere
-    - hugging face
-    - flipkart
-    - swiggy
-    - zomato
-    - meesho
-    - razorpay
-    - cred
-    - phonepe
-    - paytm
-    - nykaa
-    - urban company
-    - urbanclap
-    - sarvam
-    - krutrim
-    - ola
-    - rapido
-    - juspay
-    - khatabook
-    - sprinklr
-    - clevertap
-    - moengage
-    - sharechat
-    - dailyhunt
-    - browserstack
-    - freshworks
-    - zoho
-    - postman
-    - databricks
-    - snowflake
-    - elastic
-    - algolia
-    - pinecone
-    - weaviate
-    - qdrant
-    - cohere
+  - google
+  - meta
+  - microsoft
+  - amazon
+  - apple
+  - netflix
+  - openai
+  - anthropic
+  - cohere
+  - hugging face
+  - flipkart
+  - swiggy
+  - zomato
+  - meesho
+  - razorpay
+  - cred
+  - phonepe
+  - paytm
+  - nykaa
+  - urban company
+  - urbanclap
+  - sarvam
+  - krutrim
+  - ola
+  - rapido
+  - juspay
+  - khatabook
+  - sprinklr
+  - clevertap
+  - moengage
+  - sharechat
+  - dailyhunt
+  - browserstack
+  - freshworks
+  - zoho
+  - postman
+  - databricks
+  - snowflake
+  - elastic
+  - algolia
+  - pinecone
+  - weaviate
+  - qdrant
+  - cohere
