@@ -72,11 +72,7 @@ def load_models(offline: bool):
         os.environ["HF_HUB_OFFLINE"] = "1"
         os.environ["TRANSFORMERS_OFFLINE"] = "1"
         bi = SentenceTransformer(str(BASE / "models" / "bge-base-en-v1.5"))
-        ce_path = BASE / "models" / "finetuned-ce-model"
-        if ce_path.exists():
-            ce = CrossEncoder(str(ce_path))
-        else:
-            ce = CrossEncoder(str(BASE / "models" / "ms-marco-MiniLM-L-6-v2"))
+        ce = CrossEncoder(str(BASE / "models" / "ms-marco-MiniLM-L-6-v2"))
     else:
         bi = SentenceTransformer("BAAI/bge-base-en-v1.5")
         ce = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")

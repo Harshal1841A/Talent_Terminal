@@ -108,7 +108,7 @@ class RankingConfig:
     """Tunable ranking parameters. Defaults match config.yaml / submission path."""
 
     k_retrieve: int = 800
-    ce_pool_size: int = 500
+    ce_pool_size: int = 200
     ce_batch_size: int = 32
     top_n: int = 100
     apply_mmr: bool = True
@@ -142,7 +142,7 @@ ProgressCallback = Optional[Callable[[float, str], None]]
 
 def _report(progress: ProgressCallback, frac: float, desc: str) -> None:
     if progress is not None:
-        progress(frac, desc=desc)
+        progress(frac, desc)
 
 
 def enforce_submission_scores(ranked: list[dict]) -> list[dict]:
@@ -193,9 +193,10 @@ def apply_mmr_top100(candidates: list[dict]) -> list[dict]:
                 best_cid = cid
 
         best_cand = remaining.pop(best_idx)
-        if top_100 and best_score > top_100[-1]["score"]:
-            best_score = top_100[-1]["score"]
-        best_cand["score"] = best_score
+        effective_score = best_score
+        if top_100:
+            effective_score = min(best_score, top_100[-1]["score"])
+        best_cand["score"] = effective_score
 
         nd = best_cand["meta"].get("notice_days", 60) or 60
         nd_cat = 0 if nd <= 15 else (1 if nd <= 45 else (2 if nd <= 90 else 3))

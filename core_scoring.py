@@ -168,10 +168,9 @@ def score_ml_role_ratio(ratio: float, w_ml_ratio: float = W_ML_RATIO) -> float:
     ratio = float(ratio or 0.0)
     if ratio >= 0.5:
         return min(ratio, 1.0) * w_ml_ratio
-    elif ratio >= 0.2:
+    if ratio >= 0.2:
         return ratio * w_ml_ratio * 0.5
-    else:
-        return max(-5.0, (ratio - 0.2) * 25)
+    return max(-3.0, (ratio - 0.2) * 10)
 
 
 def score_saved_by_recruiters(saved: int, w_saved_recruiters: float = W_SAVED_RECRUITERS) -> float:

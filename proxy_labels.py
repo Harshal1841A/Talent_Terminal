@@ -99,8 +99,6 @@ def compute_proxy_relevance(meta: dict) -> int:
 
     if rel >= 3 and loc <= 1.5 and not meta.get("willing_to_relocate"):
         rel = 2
-    if rel >= 2 and notice > 90:
-        rel = min(rel, 1)
     return rel
 
 

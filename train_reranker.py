@@ -14,36 +14,29 @@ from core_scoring import build_features
 
 def create_synthetic_target(meta):
     """
-    Creates a continuous proxy score (0.0 to 1.0) for 'profile quality' 
-    to serve as the target for the LightGBM LambdaMART / Regressor.
+    Continuous proxy score (0.0–1.0) for LightGBM training.
+
+    Excludes saved_by_recruiters — already scored via score_saved_by_recruiters()
+    in the additive formula and present in build_features().
     """
-    # 1. Recruiter demand (saved_by_recruiters) is the strongest market signal
-    saves = meta.get("saved_by_recruiters", 0) or 0
-    demand_score = min(1.0, saves / 10.0)
-    
-    # 2. Platform Assessment (core ML skills)
     core = meta.get("core_skill_score", 0) or 0
     avg = meta.get("avg_assessment", 0) or 0
     skill_score = max(core, avg) / 100.0
-    
-    # 3. Career specialization (ML ratio)
-    ml_ratio = meta.get("ml_role_ratio", 0.0) or 0.0
-    
-    # 4. Experience band match (5-9 years is ideal for this role)
+
+    ml_ratio = float(meta.get("ml_role_ratio", 0.0) or 0.0)
+
     yrs = meta.get("years_exp", 0) or 0
     exp_score = 0.0
     if 5 <= yrs <= 9:
         exp_score = 1.0
     elif 3 <= yrs < 5 or 9 < yrs <= 12:
         exp_score = 0.5
-        
-    # Combine signals into a pseudo-label
-    target = (demand_score * 0.4) + (skill_score * 0.3) + (ml_ratio * 0.2) + (exp_score * 0.1)
-    
-    # Apply hard penalties
+
+    target = (skill_score * 0.40) + (ml_ratio * 0.35) + (exp_score * 0.25)
+
     if meta.get("honeypot") or meta.get("wrong_title"):
         target = 0.0
-        
+
     return float(target)
 
 def train_reranker():

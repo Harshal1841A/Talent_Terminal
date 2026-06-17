@@ -43,10 +43,11 @@ def rank_candidates():
     bi_enc = SentenceTransformer(str(BASE / "models" / "bge-base-en-v1.5"))
     finetuned_ce_path = BASE / "models" / "finetuned-ce-model"
     if finetuned_ce_path.exists():
-        print(f"Loading Fine-Tuned Cross-Encoder from {finetuned_ce_path}...")
         cross_enc = CrossEncoder(str(finetuned_ce_path))
+        print("Using finetuned-ce-model cross-encoder.")
     else:
         cross_enc = CrossEncoder(str(BASE / "models" / "ms-marco-MiniLM-L-6-v2"))
+        print("Using base ms-marco-MiniLM-L-6-v2 cross-encoder (not finetuned-ce-model).")
 
     print("Loading candidate_meta.pkl and FAISS index...")
     with open(BASE / "candidate_meta.pkl", "rb") as f:

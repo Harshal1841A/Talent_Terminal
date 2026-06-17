@@ -175,7 +175,7 @@ PREMIUM_CSS = """
         .reasoning-text { font-size: 13px; color: #94a3b8; margin-top: 10px; line-height: 1.5; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 8px; }
 """
 
-_CE_POOL_SIZE = 500
+_CE_POOL_SIZE = 200
 _CE_BATCH_SIZE = 128
 
 
@@ -211,8 +211,8 @@ def load_artifacts():
 @lru_cache(maxsize=1)
 def load_models():
     local_bge = BASE / "models" / "bge-base-en-v1.5"
+    local_finetuned_ce = BASE / "models" / "finetuned-ce-model"
     local_ce = BASE / "models" / "ms-marco-MiniLM-L-6-v2"
-    finetuned_ce = BASE / "models" / "finetuned-ce-model"
 
     if local_bge.exists():
         print("Loading BGE bi-encoder from ./models/...")
@@ -221,9 +221,9 @@ def load_models():
         print("Loading BGE bi-encoder from HuggingFace...")
         bi = SentenceTransformer("BAAI/bge-base-en-v1.5")
 
-    if finetuned_ce.exists():
-        print("Loading fine-tuned cross-encoder from ./models/...")
-        ce = CrossEncoder(str(finetuned_ce))
+    if local_finetuned_ce.exists():
+        print("Loading finetuned MiniLM cross-encoder from ./models/...")
+        ce = CrossEncoder(str(local_finetuned_ce))
     elif local_ce.exists():
         print("Loading MiniLM cross-encoder from ./models/...")
         ce = CrossEncoder(str(local_ce))
