@@ -108,8 +108,8 @@ class RankingConfig:
     """Tunable ranking parameters. Defaults match config.yaml / submission path."""
 
     k_retrieve: int = 800
-    ce_pool_size: int = 200
-    ce_batch_size: int = 32
+    ce_pool_size: int = 500
+    ce_batch_size: int = 64
     top_n: int = 100
     apply_mmr: bool = True
     use_jd_expansion: bool = True
