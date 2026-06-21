@@ -1,0 +1,10 @@
+candidate_db.pkl
+candidates.jsonl
+frontend.zip
+Team Rocket.csv
+gold_labels_proxy.csv
+__pycache__
+.git
+.agents
+models/
+frontend/node_modules/

@@ -1,0 +1,23 @@
+{
+  "role_dimensions": {
+    "technical_depth": {
+      "must_have_concepts": ["embeddings", "retrieval", "ranking", "vector search"],
+      "must_avoid": ["pure research", "academic-only"],
+      "weight": 0.30
+    },
+    "product_shipping": {
+      "must_have_signals": ["production deployment", "shipped", "MVP", "iterate"],
+      "must_avoid": ["research paper only", "theoretical"],
+      "weight": 0.25
+    },
+    "startup_fitness": {
+      "must_have_signals": ["early-stage", "founding", "0-to-1", "wore multiple hats"],
+      "must_avoid": ["well-scoped", "defined ladder"],
+      "weight": 0.20
+    },
+    "experience_band": {"min": 5, "max": 9, "ideal": 7, "weight": 0.15},
+    "location": {"preferred": ["Pune", "Noida"], "relocation_ok": true, "weight": 0.10}
+  },
+  "implicit_culture": "Tilt toward shipper over researcher. Comfortable with ambiguity.",
+  "disqualifying_patterns": ["consulting-only", "title-chaser", "keyword-stuffer"]
+}

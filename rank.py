@@ -23,7 +23,7 @@ import yaml
 from jinja2 import Environment, FileSystemLoader
 from sentence_transformers import CrossEncoder, SentenceTransformer
 
-from ranking_pipeline import RankingConfig, rank_candidates_core
+from ranking_pipeline import RankingConfig, rank_candidates_core, tokenize_bm25
 from core_scoring import reload_config
 
 BASE = Path(__file__).parent
@@ -39,15 +39,18 @@ def rank_candidates():
         print("ERROR: job_desc.txt not found. Please extract text from job_description.docx.")
         return
 
-    print("Loading Bi-Encoder and Cross-Encoder models...")
+    print("Loading Bi-Encoder...")
     bi_enc = SentenceTransformer(str(BASE / "models" / "bge-base-en-v1.5"))
+    jd_emb = bi_enc.encode(jd_text, normalize_embeddings=True)
+    del bi_enc
+    import gc
+    gc.collect()
+
     finetuned_ce_path = BASE / "models" / "finetuned-ce-model"
     if finetuned_ce_path.exists():
-        cross_enc = CrossEncoder(str(finetuned_ce_path))
-        print("Using finetuned-ce-model cross-encoder.")
+        cross_enc_path = str(finetuned_ce_path)
     else:
-        cross_enc = CrossEncoder(str(BASE / "models" / "ms-marco-MiniLM-L-6-v2"))
-        print("Using base ms-marco-MiniLM-L-6-v2 cross-encoder (not finetuned-ce-model).")
+        cross_enc_path = str(BASE / "models" / "ms-marco-MiniLM-L-6-v2")
 
     print("Loading candidate_meta.pkl and FAISS index...")
     with open(BASE / "candidate_meta.pkl", "rb") as f:
@@ -56,15 +59,14 @@ def rank_candidates():
 
     bm25 = None
     bm25_candidate_ids = {}
-    if os.path.exists(BASE / "bm25_index.pkl"):
+    if os.path.exists(BASE / "bm25_index"):
         print("Loading BM25 index...")
-        with open(BASE / "bm25_index.pkl", "rb") as f:
-            bm25_data = pickle.load(f)
-        bm25 = bm25_data["bm25"]
-        bm25_candidate_ids = {cid: i for i, cid in enumerate(bm25_data["candidate_ids"])}
+        import bm25s
+        bm25 = bm25s.BM25.load(str(BASE / "bm25_index"), load_corpus=True, mmap=True)
+        bm25_candidate_ids = {cid["text"]: i for i, cid in enumerate(bm25.corpus)}
         print(f"  BM25 index loaded ({len(bm25_candidate_ids):,} documents).")
     else:
-        print("[INFO] bm25_index.pkl not found — running without BM25 (2-way RRF only).")
+        print("[INFO] bm25_index directory not found — running without BM25 (2-way RRF only).")
         print("       Run precompute_bm25.py once to enable 3-way hybrid search.")
 
     lgb_model = None
@@ -84,16 +86,23 @@ def rank_candidates():
     try:
         top_100 = rank_candidates_core(
             jd_text=jd_text,
+            jd_emb=jd_emb,
             metadata=metadata,
             faiss_index=faiss_index,
-            bi_enc=bi_enc,
-            cross_enc=cross_enc,
+            cross_enc_path=cross_enc_path,
             bm25=bm25,
             bm25_candidate_ids=bm25_candidate_ids,
             lgb_model=lgb_model,
-            config=RankingConfig(apply_mmr=True, top_n=100),
+            config=RankingConfig(apply_mmr=False, top_n=100),
             progress=_progress,
         )
+        
+        # Free memory after ranking
+        faiss_index = None
+        bm25 = None
+        bm25_data = None
+        metadata = None
+        gc.collect()
     except Exception as e:
         print(f"CRASH in ranking pipeline: {e}")
         import traceback
@@ -124,6 +133,10 @@ def rank_candidates():
 
     print("Generating dashboard.html...")
     _write_dashboard(top_100, BASE)
+
+    import json
+    with open(BASE / "real_top_100.json", "w", encoding="utf-8") as f:
+        json.dump(top_100, f)
 
     scores = [r["score"] for r in top_100]
     print(f"\nDONE. {out_file.name} written ({len(top_100)} rows).")

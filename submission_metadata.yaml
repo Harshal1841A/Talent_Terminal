@@ -1,4 +1,4 @@
-entry_point: "app.py"
+entry_point: "rank.py"
 team_name: Team Rocket 🚀
 models_used:
   - sentence-transformers/BAAI/bge-base-en-v1.5 (Dense Bi-Encoder for Stage 1 Retrieval)

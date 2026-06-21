@@ -22,6 +22,7 @@ W_ENGAGEMENT = 0.0
 W_TRUST = 0.0
 W_LOCATION = 0.0
 W_ML_RATIO = 0.0
+W_LLM_FIT = 0.0
 RRF_K = 50.0
 RRF_WEIGHT = 0.0
 
@@ -44,7 +45,7 @@ def reload_config(config_path: Path | None = None) -> None:
     global W_SEMANTIC, W_EXPERIENCE, W_COMPANY_TYPE, W_ML_SIGNALS, W_BEHAVIORAL
     global W_SAVED_RECRUITERS, W_GITHUB, W_ASSESSMENT, W_PROFILE_COMPLETE
     global W_EDUCATION, W_RECENCY, W_ENGAGEMENT, W_TRUST, W_LOCATION, W_ML_RATIO
-    global RRF_K, RRF_WEIGHT
+    global W_LLM_FIT, RRF_K, RRF_WEIGHT
     global HONEYPOT_PENALTY, WRONG_TITLE_PENALTY, CONSULTING_ONLY_PENALTY
     global TITLE_CHASER_PENALTY, LONG_NOTICE_PENALTY, INTERNATIONAL_PENALTY
     global OFFSITE_LOCATION_PENALTY, KEYWORD_STUFFER_PENALTY, CURRENT_CONSULTING_PENALTY
@@ -70,6 +71,7 @@ def reload_config(config_path: Path | None = None) -> None:
     W_TRUST = weights["W_TRUST"]
     W_LOCATION = weights["W_LOCATION"]
     W_ML_RATIO = weights["W_ML_RATIO"]
+    W_LLM_FIT = weights.get("W_LLM_FIT", 25.0)
     RRF_K = weights["RRF_K"]
     RRF_WEIGHT = weights["RRF_WEIGHT"]
 
@@ -295,6 +297,45 @@ def score_assessment(core_skill_score: float, avg_assessment: float, w_assessmen
     return 0.0
 
 
+def score_llm_fit(meta: dict, w_llm_fit: float = W_LLM_FIT) -> float:
+    """
+    Score based on LLM assessment of candidate fit.
+    Extracts dimension scores from precomputed LLM assessment and
+    weights them according to the JD's emphasis.
+    """
+    assessment = meta.get("llm_assessment")
+    if not assessment:
+        return 0.0
+
+    # Extract dimension scores (0.0 to 1.0)
+    tech_depth = float(assessment.get("technical_depth", {}).get("score", 0.5))
+    product_ship = float(assessment.get("product_shipping", {}).get("score", 0.5))
+    startup_fit = float(assessment.get("startup_fitness", {}).get("score", 0.5))
+    exp_align = float(assessment.get("experience_alignment", {}).get("score", 0.5))
+    loc_fit = float(assessment.get("location_fit", {}).get("score", 0.5))
+
+    # Weighted composite — JD emphasizes "shipper over researcher"
+    # So product_shipping and startup_fitness get higher weights
+    composite = (
+        tech_depth * 0.25 +
+        product_ship * 0.30 +       # HIGH: JD wants shippers
+        startup_fit * 0.25 +         # HIGH: Series A culture
+        exp_align * 0.15 +
+        loc_fit * 0.05
+    )
+
+    # Penalize for red flags
+    red_flags = assessment.get("red_flags", [])
+    penalty = min(len(red_flags) * 0.08, 0.25)  # Cap penalty at 0.25
+
+    # Bonus for unique selling points
+    usps = assessment.get("unique_selling_points", [])
+    bonus = min(len(usps) * 0.05, 0.15)  # Cap bonus at 0.15
+
+    final_score = (composite - penalty + bonus) * w_llm_fit
+    return max(0.0, final_score)
+
+
 def score_jd_term_bonus(meta: dict) -> float:
     return min(float(meta.get("jd_term_bonus", 0.0) or 0.0), 20.0)
 
@@ -348,6 +389,17 @@ def build_features(meta: dict) -> list:
     skill_count = float(meta.get("skill_count", 0) or 0) / 100.0
     relocate = 1.0 if meta.get("willing_to_relocate") else 0.0
 
+    # LLM features (from precomputation)
+    llm_overall = float(meta.get("llm_overall_fit", 0.5))
+    llm_tech = 0.0
+    llm_product = 0.0
+    llm_startup = 0.0
+    if meta.get("llm_assessment"):
+        assessment = meta["llm_assessment"]
+        llm_tech = float(assessment.get("technical_depth", {}).get("score", 0.5))
+        llm_product = float(assessment.get("product_shipping", {}).get("score", 0.5))
+        llm_startup = float(assessment.get("startup_fitness", {}).get("score", 0.5))
+
     return [
         years_exp, ml_signal, jd_bonus, elite_bonus,
         product_co, consulting, github, core_skill, avg_assess,
@@ -375,6 +427,10 @@ def generate_reasoning(meta: dict, semantic_score: float, final_score: float) ->
             "JD explicitly requires a background in applied NLP, information retrieval, or production ML "
             "— not marketing, sales, HR, or embedded/robotics."
         )
+
+    # Use LLM-generated reasoning if available (premium precomputed)
+    if meta.get("llm_reasoning"):
+        return meta["llm_reasoning"]
 
     yrs = meta.get("years_exp", 0) or 0
     ml = meta.get("ml_signal_count", 0.0) or 0.0

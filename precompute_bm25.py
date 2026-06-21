@@ -2,15 +2,16 @@
 precompute_bm25.py — Build BM25 sparse index for hybrid retrieval.
 
 Requires candidate_meta.pkl (from precompute.py).
-Outputs: bm25_index.pkl
+Outputs: bm25_index (bm25s directory format)
 
 Tokenizer must stay in sync with ranking_pipeline.tokenize_bm25().
 """
 
 import pickle
+import shutil
 from pathlib import Path
 
-from rank_bm25 import BM25Okapi
+import bm25s
 from tqdm import tqdm
 
 from ranking_pipeline import tokenize_bm25
@@ -30,25 +31,32 @@ def main():
         metadata = pickle.load(f)
 
     print(f"Tokenizing {len(metadata):,} candidate documents for BM25...")
-    corpus_tokens = []
+    corpus_texts = []
     candidate_ids = []
     for meta in tqdm(metadata, desc="BM25 tokenization"):
         doc = meta.get("doc_text") or ""
-        corpus_tokens.append(tokenize_bm25(doc))
+        corpus_texts.append(doc)
         candidate_ids.append(meta["candidate_id"])
 
-    print("Building BM25Okapi index...")
-    bm25 = BM25Okapi(corpus_tokens)
+    print("Building bm25s index...")
+    # bm25s provides its own tokenization that handles batching well
+    # We use token_pattern to match exactly our previous tokenize_bm25:
+    corpus_tokens = bm25s.tokenize(
+        corpus_texts,
+        token_pattern=r"[a-z0-9][a-z0-9\-]*[a-z0-9]|[a-z0-9]",
+        lower=True
+    )
 
-    out_path = BASE / "bm25_index.pkl"
-    with open(out_path, "wb") as f:
-        pickle.dump(
-            {"bm25": bm25, "candidate_ids": candidate_ids},
-            f,
-            protocol=pickle.HIGHEST_PROTOCOL,
-        )
+    bm25 = bm25s.BM25()
+    bm25.index(corpus_tokens)
 
-    print(f"\nDone. Saved {out_path.name} ({len(candidate_ids):,} documents).")
+    out_path = BASE / "bm25_index"
+    if out_path.exists():
+        shutil.rmtree(out_path)
+
+    bm25.save(str(out_path), corpus=candidate_ids)
+
+    print(f"\nDone. Saved {out_path.name} directory ({len(candidate_ids):,} documents).")
     print("Now run: python rank.py")
 
 

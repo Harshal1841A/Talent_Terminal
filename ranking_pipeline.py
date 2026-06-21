@@ -112,7 +112,7 @@ class RankingConfig:
     ce_batch_size: int = 64
     top_n: int = 100
     apply_mmr: bool = True
-    use_jd_expansion: bool = True
+    use_jd_expansion: bool = False
     w_semantic: float = W_SEMANTIC
     w_experience: float = W_EXPERIENCE
     w_company: float = W_COMPANY_TYPE
@@ -163,13 +163,13 @@ def enforce_submission_scores(ranked: list[dict]) -> list[dict]:
     return ranked
 
 
-def apply_mmr_top100(candidates: list[dict]) -> list[dict]:
-    """Notice-period diversity re-ranking for the top 100 slots."""
+def apply_mmr(candidates: list[dict], top_n: int) -> list[dict]:
+    """Notice-period diversity re-ranking for the top_n slots."""
     remaining = sorted(candidates, key=lambda x: (-x["score"], x["candidate_id"]))
-    top_100: list[dict] = []
+    selected: list[dict] = []
     selected_notice_categories: list[int] = []
 
-    while len(top_100) < 100 and remaining:
+    while len(selected) < top_n and remaining:
         best_idx = 0
         best_score = -999999.0
         best_cid = ""
@@ -194,16 +194,16 @@ def apply_mmr_top100(candidates: list[dict]) -> list[dict]:
 
         best_cand = remaining.pop(best_idx)
         effective_score = best_score
-        if top_100:
-            effective_score = min(best_score, top_100[-1]["score"])
+        if selected:
+            effective_score = min(best_score, selected[-1]["score"])
         best_cand["score"] = effective_score
 
         nd = best_cand["meta"].get("notice_days", 60) or 60
         nd_cat = 0 if nd <= 15 else (1 if nd <= 45 else (2 if nd <= 90 else 3))
         selected_notice_categories.append(nd_cat)
-        top_100.append(best_cand)
+        selected.append(best_cand)
 
-    return enforce_submission_scores(top_100)
+    return enforce_submission_scores(selected)
 
 
 def build_retrieval_cache(
@@ -211,8 +211,9 @@ def build_retrieval_cache(
     jd_text: str,
     metadata: list,
     faiss_index,
-    bi_enc,
-    cross_enc,
+    jd_emb,
+    cross_enc_path,
+    cross_enc=None,          # pre-loaded CrossEncoder; if given, cross_enc_path is ignored
     bm25=None,
     lgb_model=None,
     config: Optional[RankingConfig] = None,
@@ -222,12 +223,9 @@ def build_retrieval_cache(
     cfg = config or RankingConfig()
     use_expansion = cfg.use_jd_expansion and is_bundled_jd(jd_text)
 
-    _report(progress, 0.20, "Stage 1: embedding JD...")
-    jd_embedding = embed_jd(bi_enc, jd_text, use_expansion=use_expansion)
-
     k = min(cfg.k_retrieve, len(metadata))
     _report(progress, 0.30, f"Stage 1: dense retrieval over {len(metadata):,} candidates...")
-    jd_emb_np = jd_embedding.cpu().numpy().reshape(1, -1)
+    jd_emb_np = jd_emb.cpu().numpy().reshape(1, -1) if hasattr(jd_emb, "cpu") else np.array(jd_emb).reshape(1, -1)
     _, top_k_indices_array = faiss_index.search(jd_emb_np, k)
 
     faiss_top_k = top_k_indices_array[0].tolist()
@@ -251,8 +249,20 @@ def build_retrieval_cache(
     n_ce = len(cross_inputs)
     _report(progress, 0.50, f"Stage 2: cross-encoder over {n_ce} candidates...")
 
+    loaded_locally = False
+    if cross_enc is None:
+        print("Loading Cross-Encoder...")
+        from sentence_transformers import CrossEncoder
+        cross_enc = CrossEncoder(cross_enc_path)
+        loaded_locally = True
+
     ce_scores_pool = cross_enc.predict(cross_inputs, batch_size=cfg.ce_batch_size)
     ce_scores_pool = np.array(ce_scores_pool, dtype=np.float32)
+    
+    if loaded_locally:
+        del cross_enc
+        import gc
+        gc.collect()
 
     ce_sentinel = float(ce_scores_pool.min()) if len(ce_scores_pool) else -9.0
     ce_score_map = {idx: float(ce_scores_pool[i]) for i, idx in enumerate(ce_pool_idx)}
@@ -349,7 +359,6 @@ def finalize_ranking(
                 + company_score
                 + ml_score
                 + behav_score
-                + recency_score
                 + gh_score
                 + assess_score
                 + edu_score
@@ -360,8 +369,6 @@ def finalize_ranking(
                 + float(meta.get("research_founding_score", 0.0) or 0.0)
                 + loc_score
                 + ml_ratio_score
-                + jd_bonus_score
-                + elite_bonus_score
             )
 
             final += apply_availability_location_penalties(meta)
@@ -423,8 +430,8 @@ def finalize_ranking(
         for r in results:
             r["reasoning"] = generate_reasoning(r["meta"], r["raw_ce"], r["score"])
 
-    if cfg.apply_mmr and cfg.top_n == 100:
-        ranked = apply_mmr_top100(results)
+    if cfg.apply_mmr:
+        ranked = apply_mmr(results, cfg.top_n)
     else:
         ranked = sorted(results, key=lambda x: (-x["score"], x["candidate_id"]))[: cfg.top_n]
         ranked = enforce_submission_scores(ranked)
@@ -440,8 +447,9 @@ def rank_candidates_core(
     jd_text: str,
     metadata: list,
     faiss_index,
-    bi_enc,
-    cross_enc,
+    jd_emb,
+    cross_enc_path,
+    cross_enc=None,          # pre-loaded CrossEncoder object (optional)
     bm25=None,
     bm25_candidate_ids: Optional[dict] = None,
     lgb_model=None,
@@ -464,7 +472,8 @@ def rank_candidates_core(
         jd_text=jd_text,
         metadata=metadata,
         faiss_index=faiss_index,
-        bi_enc=bi_enc,
+        jd_emb=jd_emb,
+        cross_enc_path=cross_enc_path,
         cross_enc=cross_enc,
         bm25=bm25,
         lgb_model=lgb_model,
