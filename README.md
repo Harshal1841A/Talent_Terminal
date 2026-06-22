@@ -3,9 +3,7 @@ title: Talent Terminal
 emoji: 🚀
 colorFrom: blue
 colorTo: green
-sdk: gradio
-sdk_version: 6.17.3
-app_file: app.py
+sdk: docker
 pinned: false
 ---
 
@@ -23,7 +21,7 @@ Candidate ranking pipeline for the Redrob / India Runs Data and AI Challenge. Fi
 | 2 | `ms-marco-MiniLM-L-6-v2` | Cross-encoder re-ranks top 500 |
 | 3 | Heuristics + RRF + MMR | Experience curve, ML-ratio, anti-gaming, fusion |
 
-**Single code path:** `ranking_pipeline.py` is shared by `rank.py` (submission) and `app.py` (Gradio demo).
+**Single code path:** `ranking_pipeline.py` is shared by `rank.py` (submission) and `api_server.py` (FastAPI backend).
 
 ## Quick start
 
@@ -31,9 +29,14 @@ Candidate ranking pipeline for the Redrob / India Runs Data and AI Challenge. Fi
 pip install -r requirements.txt
 python download_models.py          # once, needs network
 python precompute.py               # ~hours: candidate_meta.pkl + faiss_index.bin
-python precompute_bm25.py          # minutes: bm25_index.pkl
-python rank.py                     # <5 min: Team Rocket.csv + dashboard.html
+python precompute_bm25.py          # minutes: bm25_index/ folder
+python rank.py                     # <5 min: Team Rocket.csv
 python validate_submission.py "Team Rocket.csv"
+
+# To run the web interface:
+uvicorn api_server:app --port 7860
+# In a separate terminal:
+cd frontend && npm install && npm run dev
 ```
 
 ## Evaluation and weight tuning
@@ -80,13 +83,14 @@ python audit_top_n.py --top 20
 
 | File | Purpose |
 |------|---------|
-| `ranking_pipeline.py` | Unified 3-stage ranking (shared by rank + app) |
+| `ranking_pipeline.py` | Unified 3-stage ranking (shared by rank + API) |
 | `core_scoring.py` | Heuristic scoring + explainability templates |
 | `config.yaml` | Tunable weights and penalty values |
 | `precompute.py` | Offline feature extraction + FAISS index |
 | `precompute_bm25.py` | BM25 sparse index |
 | `rank.py` | Production submission script (offline) |
-| `app.py` | Gradio demo (HF Spaces entry point) |
+| `api_server.py` | FastAPI backend |
+| `frontend/` | React + Vite UI |
 | `build_proxy_gold.py` | Generate proxy evaluation labels |
 | `tune_weights.py` | Fast weight search against proxy NDCG@10 |
 | `audit_top_n.py` | Flag JD misalignments in top N |
@@ -97,15 +101,17 @@ python audit_top_n.py --top 20
 |----------|--------------|
 | `candidate_meta.pkl` | `precompute.py` |
 | `faiss_index.bin` | `precompute.py` |
-| `bm25_index.pkl` | `precompute_bm25.py` |
+| `bm25_index/` | `precompute_bm25.py` |
+| `lgbm_reranker.pkl` | `train_reranker.py` |
 | `models/` | `download_models.py` |
 | `Team Rocket.csv` | `rank.py` |
-| `dashboard.html` | `rank.py` |
 
 ## Hugging Face Spaces deploy
 
 1. Push code only (no models/pkl in git).
 2. On the Space: run `download_models.py`, upload or precompute artifacts.
-3. Spaces launches `app.py` automatically via `submission_metadata.yaml`.
+3. Use `upload_missing_files.py` to push generated artifacts to the space.
+4. Spaces launches Docker container automatically.
 
 Default slider values in the Gradio app match `config.yaml` and produce submission-equivalent rankings (including MMR).
+

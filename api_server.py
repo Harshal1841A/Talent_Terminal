@@ -16,9 +16,6 @@ Fixes applied:
 
 import os
 
-# Must precede any HuggingFace import
-# os.environ["HF_HUB_OFFLINE"] = "1"
-# os.environ["TRANSFORMERS_OFFLINE"] = "1"
 
 import pickle
 from contextlib import asynccontextmanager
@@ -39,82 +36,92 @@ BASE = Path(__file__).parent
 # ── State container ────────────────────────────────────────────────────────
 _state: dict = {}
 _ready: bool = False   # True only after ALL models are loaded successfully
-
+_load_error: Optional[str] = None
 
 def _load_models() -> None:
-    global _ready
+    global _ready, _load_error
     _ready = False
+    _load_error = None
 
-    print("Loading candidate_meta.pkl and FAISS index...")
-    with open(BASE / "candidate_meta.pkl", "rb") as f:
-        _state["metadata"] = pickle.load(f)
-    _state["faiss_index"] = faiss.read_index(str(BASE / "faiss_index.bin"))
+    try:
 
-    _state["bm25"] = None
-    _state["bm25_candidate_ids"] = {}
-    bm25_dir = BASE / "bm25_index"
-    if bm25_dir.exists():
-        print("Loading BM25 index...")
-        import bm25s
-        bm25 = bm25s.BM25.load(str(bm25_dir), load_corpus=True, mmap=True)
-        _state["bm25"] = bm25
+        print("Loading candidate_meta.pkl and FAISS index...")
+        with open(BASE / "candidate_meta.pkl", "rb") as f:
+            _state["metadata"] = pickle.load(f)
+        _state["faiss_index"] = faiss.read_index(str(BASE / "faiss_index.bin"))
 
-        # precompute_bm25.py saves corpus=candidate_ids (plain str list).
-        # bm25s wraps each entry as {"text": <original_value>} on load.
-        # The value stored IS the candidate_id string, not document text.
-        corpus = bm25.corpus
-        if corpus:
-            sample = corpus[0]
-            if isinstance(sample, dict):
-                # {"text": "<candidate_id>"} — standard bm25s saved format
-                _state["bm25_candidate_ids"] = {
-                    item["text"]: i for i, item in enumerate(corpus)
-                }
-            else:
-                # Bare strings (older bm25s version or custom save)
-                _state["bm25_candidate_ids"] = {
-                    str(item): i for i, item in enumerate(corpus)
-                }
-        print(f"  BM25 loaded ({len(_state['bm25_candidate_ids']):,} documents).")
+        _state["bm25"] = None
+        _state["bm25_candidate_ids"] = {}
+        bm25_dir = BASE / "bm25_index"
+        if bm25_dir.exists():
+            print("Loading BM25 index...")
+            import bm25s
+            bm25 = bm25s.BM25.load(str(bm25_dir), load_corpus=True, mmap=True)
+            _state["bm25"] = bm25
 
-    _state["lgb_model"] = None
-    lgb_path = BASE / "lgbm_reranker.pkl"
-    if lgb_path.exists():
-        print("Loading LightGBM reranker...")
-        import joblib
-        lgb_model = joblib.load(lgb_path)
-        if isinstance(lgb_model, dict) and "model" in lgb_model:
-            lgb_model = lgb_model["model"]
-        _state["lgb_model"] = lgb_model
+            # precompute_bm25.py saves corpus=candidate_ids (plain str list).
+            # bm25s wraps each entry as {"text": <original_value>} on load.
+            # The value stored IS the candidate_id string, not document text.
+            corpus = bm25.corpus
+            if corpus:
+                sample = corpus[0]
+                if isinstance(sample, dict):
+                    # {"text": "<candidate_id>"} — standard bm25s saved format
+                    _state["bm25_candidate_ids"] = {
+                        item["text"]: i for i, item in enumerate(corpus)
+                    }
+                else:
+                    # Bare strings (older bm25s version or custom save)
+                    _state["bm25_candidate_ids"] = {
+                        str(item): i for i, item in enumerate(corpus)
+                    }
+            print(f"  BM25 loaded ({len(_state['bm25_candidate_ids']):,} documents).")
 
-    from sentence_transformers import SentenceTransformer, CrossEncoder
-    print("Loading Bi-Encoder...")
-    bi_enc_path = BASE / "models" / "bge-base-en-v1.5"
-    if not bi_enc_path.exists():
-        bi_enc_path = "BAAI/bge-base-en-v1.5"
-    _state["bi_enc"] = SentenceTransformer(str(bi_enc_path))
+        _state["lgb_model"] = None
+        lgb_path = BASE / "lgbm_reranker.pkl"
+        if lgb_path.exists():
+            print("Loading LightGBM reranker...")
+            import joblib
+            lgb_model = joblib.load(lgb_path)
+            if isinstance(lgb_model, dict) and "model" in lgb_model:
+                lgb_model = lgb_model["model"]
+            _state["lgb_model"] = lgb_model
+
+        from sentence_transformers import SentenceTransformer, CrossEncoder
+        print("Loading Bi-Encoder...")
+        bi_enc_path = BASE / "models" / "bge-base-en-v1.5"
+        if not bi_enc_path.exists():
+            bi_enc_path = "BAAI/bge-base-en-v1.5"
+        _state["bi_enc"] = SentenceTransformer(str(bi_enc_path))
     
-    print("Loading Cross-Encoder...")
-    finetuned_ce = BASE / "models" / "finetuned-ce-model"
-    if finetuned_ce.exists():
-        ce_path = str(finetuned_ce)
-    else:
-        ce_path = BASE / "models" / "ms-marco-MiniLM-L-6-v2"
-        if not ce_path.exists():
-            ce_path = "cross-encoder/ms-marco-MiniLM-L-6-v2"
-    _state["cross_enc_path"] = str(ce_path)
-    _state["cross_enc"] = CrossEncoder(str(ce_path))
+        print("Loading Cross-Encoder...")
+        finetuned_ce = BASE / "models" / "finetuned-ce-model"
+        if finetuned_ce.exists():
+            ce_path = str(finetuned_ce)
+        else:
+            ce_path = BASE / "models" / "ms-marco-MiniLM-L-6-v2"
+            if not ce_path.exists():
+                ce_path = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+        _state["cross_enc_path"] = str(ce_path)
+        _state["cross_enc"] = CrossEncoder(str(ce_path))
 
 
-    reload_config()
-    _ready = True
-    print(f"API ready. {len(_state['metadata']):,} candidates loaded.")
+        reload_config()
+        _ready = True
+        print(f"API ready. {len(_state['metadata']):,} candidates loaded.")
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        _load_error = f"{type(e).__name__}: {str(e)}\n{traceback.format_exc()}"
+        print(f"Failed to load models: {_load_error}")
 
 
-# ── Lifespan (replaces deprecated @app.on_event) ──────────────────────────
+import asyncio
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    _load_models()
+    asyncio.create_task(asyncio.to_thread(_load_models))
     yield
     # Teardown (if needed) goes here
 
@@ -190,9 +197,10 @@ def _shape_result(r: dict, rank: int) -> dict:
 
 
 # ── Routes ─────────────────────────────────────────────────────────────────
-import gc
 @app.post("/api/rank")
 def rank(req: RankRequest):
+    if _load_error:
+        raise HTTPException(status_code=500, detail=f"Model loading failed: {_load_error}")
     if not _ready:
         raise HTTPException(status_code=503, detail="Models still loading, try again in a moment")
 
@@ -230,8 +238,9 @@ def rank(req: RankRequest):
 @app.get("/api/health")
 def health():
     return {
-        "status": "ready" if _ready else "loading",
+        "status": "ready" if _ready else ("error" if _load_error else "loading"),
         "ready": _ready,
+        "error": _load_error,
         "candidates_loaded": len(_state.get("metadata", [])),
     }
 

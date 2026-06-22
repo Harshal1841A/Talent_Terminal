@@ -13,14 +13,14 @@ os.environ["HF_HUB_OFFLINE"] = "1"
 os.environ["TRANSFORMERS_OFFLINE"] = "1"
 
 import csv
-import html
+
 import pickle
 import sys
 from pathlib import Path
 
 import faiss
 import yaml
-from jinja2 import Environment, FileSystemLoader
+
 from sentence_transformers import CrossEncoder, SentenceTransformer
 
 from ranking_pipeline import RankingConfig, rank_candidates_core, tokenize_bm25
@@ -131,8 +131,7 @@ def rank_candidates():
                 c["reasoning"],
             ])
 
-    print("Generating dashboard.html...")
-    _write_dashboard(top_100, BASE)
+
 
     import json
     with open(BASE / "real_top_100.json", "w", encoding="utf-8") as f:
@@ -153,102 +152,6 @@ def rank_candidates():
             print(f"  - {e}")
         sys.exit(1)
     print(f"\nSubmission validated: {out_file.name}")
-    print("Open dashboard.html in your browser to view results visually.")
-
-
-def _write_dashboard(top_100: list, base_dir: Path):
-    """Generate a beautiful HTML dashboard showing the top 100 ranked candidates."""
-    positive_scores = [c["score"] for c in top_100 if c["score"] > 0]
-    max_score = max(positive_scores, default=1)
-
-    cards = []
-    for rank_pos, c in enumerate(top_100, 1):
-        meta = c["meta"]
-        score = c["score"]
-        score_pct = max(0, min(100, (score / max_score) * 100))
-        reasoning = html.escape(c["reasoning"])
-
-        if rank_pos <= 3:
-            badge_class = "badge-gold"
-        elif rank_pos <= 10:
-            badge_class = "badge-silver"
-        else:
-            badge_class = "badge-bronze"
-
-        if score_pct >= 75:
-            bar_color = "#22c55e"
-        elif score_pct >= 50:
-            bar_color = "#3b82f6"
-        elif score_pct >= 30:
-            bar_color = "#f59e0b"
-        else:
-            bar_color = "#ef4444"
-
-        signals = []
-        if meta.get("open_to_work"):
-            signals.append({"css_class": "signal-green", "text": "Open to Work"})
-        if meta.get("has_product_company"):
-            signals.append({"css_class": "signal-blue", "text": "Product Co."})
-        if meta.get("edu_tier_1"):
-            signals.append({"css_class": "signal-purple", "text": "Tier-1 Edu"})
-        if meta.get("consulting_only"):
-            signals.append({"css_class": "signal-red", "text": "Consulting Only"})
-        nd = meta.get("notice_days", 90)
-        if nd == 0:
-            signals.append({"css_class": "signal-green", "text": "Immediate"})
-        elif nd <= 30:
-            signals.append({"css_class": "signal-green", "text": f"{nd}d Notice"})
-        elif nd > 90:
-            signals.append({"css_class": "signal-red", "text": f"{nd}d Notice"})
-        gh = meta.get("github_score", -1)
-        if gh >= 70:
-            signals.append({"css_class": "signal-blue", "text": f"GitHub ★ {gh:.0f}"})
-        ml = meta.get("ml_signal_count", 0)
-        if ml >= 0.8:
-            signals.append({"css_class": "signal-purple", "text": "Strong ML Signals"})
-        elif ml >= 0.5:
-            signals.append({"css_class": "signal-purple", "text": "Moderate ML Signals"})
-
-        breakdown = {k: v for k, v in c.get("breakdown", {}).items() if v != 0}
-
-        cards.append({
-            "rank_pos": rank_pos,
-            "badge_class": badge_class,
-            "candidate_id": c["candidate_id"],
-            "title": html.escape(meta.get("current_title", "Unknown Role") or "Unknown Role"),
-            "company": html.escape(meta.get("current_company", "") or ""),
-            "score": score,
-            "score_pct": score_pct,
-            "bar_color": bar_color,
-            "yrs": meta.get("years_exp", 0),
-            "bienc_r": c.get("bienc_rank", "?"),
-            "ce_r": c.get("ce_rank", "?"),
-            "breakdown": breakdown,
-            "signals": signals,
-            "reasoning": c["reasoning"],
-        })
-
-    _top1_score = f"{top_100[0]['score']:.1f}" if top_100 else "N/A"
-    _topN_score = f"{top_100[-1]['score']:.1f}" if top_100 else "N/A"
-    _n_open = sum(1 for c in top_100 if c["meta"].get("open_to_work"))
-    _n_product = sum(1 for c in top_100 if c["meta"].get("has_product_company"))
-
-    env = Environment(loader=FileSystemLoader(str(base_dir)))
-    template = env.get_template("dashboard_template.html")
-    html_content = template.render(
-        num_candidates=len(top_100),
-        top1_score=_top1_score,
-        topN_score=_topN_score,
-        n_open=_n_open,
-        n_product=_n_product,
-        cards=cards,
-    )
-
-    out_path = base_dir / "dashboard.html"
-    with open(out_path, "w", encoding="utf-8") as f:
-        f.write(html_content)
-    print(f"\nCreated static dashboard: {out_path.absolute()}")
-
 
 if __name__ == "__main__":
     rank_candidates()

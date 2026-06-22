@@ -1,8 +1,14 @@
 # Use an official Python runtime as a parent image
 FROM python:3.10-slim
 
+# Install system dependencies (libgomp1 is needed for LightGBM)
+RUN apt-get update && apt-get install -y libgomp1 && rm -rf /var/lib/apt/lists/*
+
 # Set the working directory to /app
 WORKDIR /app
+
+# Install CPU-only PyTorch first to save build time and space
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 
 # Copy requirements and install
 COPY requirements.txt .

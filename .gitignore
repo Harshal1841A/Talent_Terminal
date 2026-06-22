@@ -2,6 +2,7 @@
 *.pkl
 *.bin
 *.jsonl
+!bm25_index/corpus.jsonl
 *.csv
 *.parquet
 models/
