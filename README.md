@@ -9,6 +9,8 @@ pinned: false
 
 # Talent Terminal — Team Rocket
 
+**Live Demo:** [https://huggingface.co/spaces/NeuralHU/Talent_Terminal](https://huggingface.co/spaces/NeuralHU/Talent_Terminal)
+
 Candidate ranking pipeline for the Redrob / India Runs Data and AI Challenge. Filters and ranks 100K+ profiles using hybrid retrieval (BGE + BM25), cross-encoder re-ranking, and JD-aligned behavioral heuristics.
 
 **Constraints:** ≤5 min inference, ≤16GB RAM, CPU-only, fully offline at judging time.
